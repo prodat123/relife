@@ -10,12 +10,12 @@ const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
 
 app.use(bodyParser.json());
 
-app.use(cors());
+app.use(cors({
+    origin: 'https://relifehabits.com', // Allow only frontend domain
+    methods: 'GET,POST,PUT,DELETE',
+    credentials: true
+}));
 
-const options = {
-    key: fs.readFileSync('/etc/letsencrypt/live/relifehabits.com/privkey.pem'),
-    cert: fs.readFileSync('/etc/letsencrypt/live/relifehabits.com/fullchain.pem')
-};
 
 app.post('/auth/signup', async (req, res) => {
     const { username, password, email, age } = req.body;
@@ -1003,7 +1003,6 @@ app.post('/spin-wheel', async (req, res) => {
 });
 
 
-
-https.createServer(options, app).listen(3001, () => {
-    console.log('✅ HTTPS Server is running on port 3001');
+app.listen(3001, () => {
+    console.log('✅ Backend running on HTTP at port 3001');
 });
