@@ -12,6 +12,11 @@ app.use(bodyParser.json());
 
 app.use(cors());
 
+const options = {
+    key: fs.readFileSync('/etc/letsencrypt/live/relifehabits.com/privkey.pem'),
+    cert: fs.readFileSync('/etc/letsencrypt/live/relifehabits.com/fullchain.pem')
+};
+
 app.post('/auth/signup', async (req, res) => {
     const { username, password, email, age } = req.body;
 
@@ -999,5 +1004,6 @@ app.post('/spin-wheel', async (req, res) => {
 
 
 
-
-app.listen(3001, () => console.log('Server running on port 3001'));
+https.createServer(options, app).listen(3001, () => {
+    console.log('✅ HTTPS Server is running on port 3001');
+});
