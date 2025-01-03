@@ -1,0 +1,13 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body{
+  font-family: "Space Mono", serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+img.pixel-art {
+  image-rendering: pixelated; /* Ensures pixel art doesn't get smoothed */
+}
