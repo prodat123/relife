@@ -10,11 +10,7 @@ const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
 
 app.use(bodyParser.json());
 
-app.use(cors({
-    origin: 'https://relifehabits.com', // Allow only frontend domain
-    methods: 'GET,POST,PUT,DELETE',
-    credentials: true
-}));
+app.use(cors());
 
 
 app.post('/auth/signup', async (req, res) => {
