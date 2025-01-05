@@ -159,10 +159,13 @@ const clearCompletedQuestParticipants = async () => {
     }
 };
 
-cron.schedule('0 0 * * *', async() => { 
-    console.log('Running daily quest insertion...');
+cron.schedule('0 0 * * *', async () => { 
+    console.log(`[${new Date().toISOString()}] Running daily quest insertion...`);
     await clearCompletedQuestParticipants();
     await insertDailyQuests();
+}, {
+    scheduled: true,
+    timezone: 'America/Los_Angeles' // California Timezone
 });
 
 cron.schedule('0 */6 * * *', async () => {
