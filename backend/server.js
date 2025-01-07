@@ -586,17 +586,32 @@ app.post('/update-equipment', async (req, res) => {
     }
 
     try {
-        // Retrieve the current user's stats (from the `stats` column)
-        const [userStatsResult] = await db.query(
-            'SELECT stats FROM users WHERE id = ?',
-            [userId]
+        // Retrieve the current user's stats and equipped item
+        const [userResult] = await db.query(
+            `SELECT stats, ?? AS equippedItem FROM users WHERE id = ?`,
+            [slot, userId]
         );
 
-        if (userStatsResult.length === 0) {
+        if (userResult.length === 0) {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        let userStats = JSON.parse(userStatsResult[0].stats);
+        let userStats = JSON.parse(userResult[0].stats || '{}');
+        const equippedItemId = userResult[0].equippedItem;
+
+        // ⚙️ Step 1: Remove stats from the currently equipped item, if any
+        if (equippedItemId) {
+            console.log("Resetting stats from currently equipped item");
+            const currentItem = inventory.find(item => item.id === equippedItemId);
+            if (currentItem) {
+                const currentItemStats = JSON.parse(currentItem.stats || '{}');
+                Object.keys(currentItemStats).forEach(stat => {
+                    if (userStats.hasOwnProperty(stat)) {
+                        userStats[stat] -= currentItemStats[stat];
+                    }
+                });
+            }
+        }
 
         if (itemId !== null) {
             console.log("Equipping item");
@@ -607,10 +622,12 @@ app.post('/update-equipment', async (req, res) => {
                 return res.status(404).json({ error: 'Item not found in inventory' });
             }
 
-            const itemStats = JSON.parse(item.stats);
+            const itemStats = JSON.parse(item.stats || '{}');
             Object.keys(itemStats).forEach(stat => {
                 if (userStats.hasOwnProperty(stat)) {
                     userStats[stat] += itemStats[stat];
+                } else {
+                    userStats[stat] = itemStats[stat];
                 }
             });
 
@@ -619,6 +636,7 @@ app.post('/update-equipment', async (req, res) => {
                 [JSON.stringify(userStats), userId]
             );
         } else {
+            console.log("Unequipping item");
             // Handle de-equipping item
             const [currentEquipResult] = await db.query(
                 `SELECT ${slot} FROM users WHERE id = ?`,
@@ -630,15 +648,13 @@ app.post('/update-equipment', async (req, res) => {
                 return res.status(400).json({ error: 'No item is equipped in this slot' });
             }
         
-            // Handle the case where an item was previously equipped
             const currentItem = inventory.find(item => item.id === currentItemId);
             if (!currentItem) {
                 return res.status(404).json({ error: 'Currently equipped item not found in inventory' });
             }
         
             // Decrease stats and remove the item from slot
-            // Make sure stats are correctly updated
-            const itemStats = JSON.parse(currentItem.stats);
+            const itemStats = JSON.parse(currentItem.stats || '{}');
             Object.keys(itemStats).forEach(stat => {
                 if (userStats.hasOwnProperty(stat)) {
                     userStats[stat] -= itemStats[stat];
@@ -651,18 +667,19 @@ app.post('/update-equipment', async (req, res) => {
             );
         }
 
-        // Update the equipment slot
+        // Step 3: Always Update the Equipment Slot
         await db.query(
             'UPDATE users SET ?? = ? WHERE id = ?',
             [slot, itemId, userId]
         );
 
-        res.status(200).json({ message: 'Equipment updated and stats modified successfully' });
+        res.status(200).json({ message: 'Equipment updated and stats modified successfully', updatedStats: userStats });
     } catch (error) {
         console.error('Error updating equipment and stats:', error.message);
         res.status(500).json({ error: 'Failed to update equipment and stats' });
     }
 });
+
 
 app.get('/items/:itemId', async (req, res) => {
     const { itemId } = req.params;  // Get the itemId from the request parameter
