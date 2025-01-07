@@ -875,7 +875,7 @@ app.post('/shop/buy', async (req, res) => {
     }
 
     try {
-        // Fetch item details from items table by joining shop_items and items table
+        // Fetch item details from shop_items and items table
         const [itemDetails] = await db.query(
             `SELECT i.*, si.price 
              FROM shop_items si 
@@ -888,11 +888,11 @@ app.post('/shop/buy', async (req, res) => {
             return res.status(404).json({ error: 'Item not found.' });
         }
 
-        const { price, ...item } = itemDetails[0]; // Extract item details and original price
+        const { price, stats, ...item } = itemDetails[0];
 
-        // Validate that the discounted price is less than or equal to the original price
+        // Validate discounted price
         const calculatedDiscountedPrice = Math.max(
-            Math.floor(price * (1 - req.body.discount / 100 || 0)),
+            Math.floor(price * (1 - (req.body.discount / 100 || 0))),
             1
         );
 
@@ -909,20 +909,36 @@ app.post('/shop/buy', async (req, res) => {
             return res.status(404).json({ error: 'User not found.' });
         }
 
-        let { currency, inventory, stats } = user[0];
+        let { currency, inventory, stats: userStats } = user[0];
         inventory = JSON.parse(inventory || '[]');
-        stats = JSON.parse(stats || '{}');
+        userStats = JSON.parse(userStats || '{}');
 
-        // Check if the user has enough currency
+        // Check if user has enough currency
         if (currency < discountedPrice) {
             return res.status(400).json({ error: 'Not enough currency.' });
         }
 
-        // Deduct the discounted price and add the item object to the inventory
+        // Deduct currency
         currency -= discountedPrice;
-        inventory.push(item); // Append the entire item object
 
-        // Update the user's currency and inventory in the database
+        // Prepare item with random stat modifiers and a unique UUID
+        let itemWithRandomStats = { ...item, id: uuidv4() };
+
+        if (stats) {
+            let itemStats = JSON.parse(stats);
+
+            for (let stat in itemStats) {
+                const randomModifier = Math.floor(Math.random() * 7) - 3; // ±3 random modifier
+                itemStats[stat] += randomModifier;
+            }
+
+            itemWithRandomStats.stats = JSON.stringify(itemStats);
+        }
+
+        // Append modified item to inventory
+        inventory.push(itemWithRandomStats);
+
+        // Update user's inventory and currency
         await db.query(
             `UPDATE users
              SET currency = ?, inventory = ?
