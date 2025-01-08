@@ -873,7 +873,7 @@ app.get('/shop/items', async (req, res) => {
 
 
 app.post('/shop/buy', async (req, res) => {
-    const { userId, itemId, price: discountedPrice } = req.body;
+    const { userId, itemId, price: discountedPrice, isGacha } = req.body;
 
     // Validate request parameters
     if (!userId || !itemId || discountedPrice === undefined) {
@@ -896,13 +896,16 @@ app.post('/shop/buy', async (req, res) => {
 
         const { price, stats, ...item } = itemDetails[0];
 
+        // If it's a Gacha roll, use a fixed price of 50
+        const finalPrice = isGacha ? 50 : discountedPrice;
+
         // Validate discounted price
         const calculatedDiscountedPrice = Math.max(
             Math.floor(price * (1 - (req.body.discount / 100 || 0))),
             1
         );
 
-        if (discountedPrice !== calculatedDiscountedPrice) {
+        if (!isGacha && discountedPrice !== calculatedDiscountedPrice) {
             return res.status(400).json({ error: 'Invalid discounted price.' });
         }
 
@@ -920,12 +923,12 @@ app.post('/shop/buy', async (req, res) => {
         userStats = JSON.parse(userStats || '{}');
 
         // Check if user has enough currency
-        if (currency < discountedPrice) {
+        if (currency < finalPrice) {
             return res.status(400).json({ error: 'Not enough currency.' });
         }
 
         // Deduct currency
-        currency -= discountedPrice;
+        currency -= finalPrice;
 
         // Prepare item with random stat modifiers and a unique UUID
         let itemWithRandomStats = { ...item, id: uuidv4() };
@@ -963,6 +966,7 @@ app.post('/shop/buy', async (req, res) => {
         res.status(500).json({ error: 'Failed to purchase item.' });
     }
 });
+
 
 
 app.post('/spin-wheel', async (req, res) => {
