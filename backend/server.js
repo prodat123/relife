@@ -605,26 +605,27 @@ app.post('/update-equipment', async (req, res) => {
         let userStats = JSON.parse(userResult[0].stats || '{}');
         const equippedItemId = userResult[0].equippedItem;
 
+        // ⚙️ Handle Stat Adjustment for Previously Equipped Item
+        if (equippedItemId) {
+            console.log("Removing stats from previously equipped item");
+
+            const equippedItem = inventory.find(item => item.id === equippedItemId);
+            if (equippedItem) {
+                const equippedItemStats = JSON.parse(equippedItem.stats || '{}');
+                Object.keys(equippedItemStats).forEach(stat => {
+                    if (userStats.hasOwnProperty(stat)) {
+                        userStats[stat] -= equippedItemStats[stat];
+                        if (userStats[stat] < 0) userStats[stat] = 0; // Prevent negative stats
+                    }
+                });
+            } else {
+                console.warn("Previously equipped item not found in inventory");
+            }
+        }
+
         // ⚙️ Handle Unequip Logic
         if (itemId === null) {
             console.log("Unequipping item");
-
-            if (!equippedItemId) {
-                return res.status(400).json({ error: 'No item equipped in this slot' });
-            }
-
-            const equippedItem = inventory.find(item => item.id === equippedItemId);
-            if (!equippedItem) {
-                return res.status(404).json({ error: 'Equipped item not found in inventory' });
-            }
-
-            const equippedItemStats = JSON.parse(equippedItem.stats || '{}');
-            Object.keys(equippedItemStats).forEach(stat => {
-                if (userStats.hasOwnProperty(stat)) {
-                    userStats[stat] -= equippedItemStats[stat];
-                    if (userStats[stat] < 0) userStats[stat] = 0; // Prevent negative stats
-                }
-            });
 
             // Update stats and unequip the item
             await db.query(
@@ -639,7 +640,7 @@ app.post('/update-equipment', async (req, res) => {
         }
 
         // ⚙️ Handle Equip Logic
-        console.log("Equipping item");
+        console.log("Equipping new item");
 
         const newItem = inventory.find(item => item.id === itemId);
         if (!newItem) {
@@ -667,6 +668,7 @@ app.post('/update-equipment', async (req, res) => {
         res.status(500).json({ error: 'Failed to update equipment and stats' });
     }
 });
+
 
 
 
