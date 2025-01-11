@@ -612,10 +612,10 @@ app.post('/update-equipment', async (req, res) => {
             const equippedItem = inventory.find(item => item.id === equippedItemId);
             if (equippedItem) {
                 const equippedItemStats = JSON.parse(equippedItem.stats || '{}');
-                Object.keys(equippedItemStats).forEach(stat => {
-                    if (userStats.hasOwnProperty(stat)) {
-                        userStats[stat] -= equippedItemStats[stat];
-                        if (userStats[stat] < 0) userStats[stat] = 0; // Prevent negative stats
+                Object.entries(equippedItemStats).forEach(([stat, value]) => {
+                    if (userStats[stat] !== undefined) {
+                        userStats[stat] -= value;
+                        if (userStats[stat] <= 0) delete userStats[stat]; // Remove stat if it becomes 0 or less
                     }
                 });
             } else {
@@ -648,8 +648,8 @@ app.post('/update-equipment', async (req, res) => {
         }
 
         const newItemStats = JSON.parse(newItem.stats || '{}');
-        Object.keys(newItemStats).forEach(stat => {
-            userStats[stat] = (userStats[stat] || 0) + newItemStats[stat];
+        Object.entries(newItemStats).forEach(([stat, value]) => {
+            userStats[stat] = (userStats[stat] || 0) + value;
         });
 
         // Update stats and equip the new item
@@ -668,6 +668,7 @@ app.post('/update-equipment', async (req, res) => {
         res.status(500).json({ error: 'Failed to update equipment and stats' });
     }
 });
+
 
 
 
