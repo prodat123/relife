@@ -193,17 +193,6 @@ app.get('/quests', async (req, res) => {
     }
 });
 
-// app.get('/quests/:questId', async (req, res) => {
-//     try {
-//         const { questId } = req.query;
-//         const [ quests ] = await db.query('SELECT * FROM quests WHERE id = ?', [questId]);
-//         res.json(quests);
-//     } catch (error) {
-//         console.error('Error fetching quests:', error);
-//         res.status(500).json({ message: 'Internal Server Error' });
-//     }
-// });
-
 app.post('/quests/select', async (req, res) => {
     const { questId, userId } = req.body;
 
