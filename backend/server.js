@@ -184,8 +184,7 @@ cron.schedule('0 */6 * * *', async () => {
 // Get quests by type
 app.get('/quests', async (req, res) => {
     try {
-        const { type } = req.query;
-        const [ quests ] = await db.query('SELECT * FROM quests WHERE type = ?', [type]);
+        const [ quests ] = await db.query('SELECT * FROM quests');
         res.json(quests);
     } catch (error) {
         console.error('Error fetching quests:', error);
