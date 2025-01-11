@@ -309,13 +309,17 @@ app.get('/quests/completed', async (req, res) => {
     }
 
     try {
-        // Query to fetch completed quests for the given user where completed = true
+        // Get the current date (formatted as 'YYYY-MM-DD')
+        const currentDate = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
+
+        // Query to fetch completed quests for the given user where completed = true and completed date is today
         const [completedQuests] = await db.query(
-            `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, q.name, q.description 
+            `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, q.name, q.description, qp.completed_at 
              FROM quest_participants qp
              INNER JOIN quests q ON qp.quest_id = q.id
-             WHERE qp.user_id = ? AND qp.completed = true`,
-            [userId]
+             WHERE qp.user_id = ? AND qp.completed = true 
+             AND DATE(qp.completed_at) = ?`,
+            [userId, currentDate]  // Compare the 'completed_at' with today's date
         );
 
         // Return the completed quests
@@ -326,6 +330,7 @@ app.get('/quests/completed', async (req, res) => {
         res.status(500).json({ error: 'An error occurred while fetching completed quests' });
     }
 });
+
 
 app.post('/quests/finish', async (req, res) => {
     const { questId, userId } = req.body;
