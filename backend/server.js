@@ -870,6 +870,7 @@ app.post("/add-currency", async (req, res) => {
 
 app.get('/shop/items', async (req, res) => {
     try {
+        const limit = parseInt(req.query.limit, 10) || 100;
         const offset = parseInt(req.query.offset, 10) || 0;
 
         const [items] = await db.query(`
@@ -885,7 +886,7 @@ app.get('/shop/items', async (req, res) => {
                 shop_items si
             JOIN 
                 items i ON si.item_id = i.id
-            OFFSET ?
+            LIMIT ? OFFSET ?
         `, [limit, offset]);
 
         res.json(items);
