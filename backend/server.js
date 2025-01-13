@@ -161,7 +161,7 @@ const clearCompletedQuestParticipants = async () => {
 
 cron.schedule('0 0 * * *', async () => { 
     console.log(`[${new Date().toISOString()}] Running daily quest insertion...`);
-    // await clearCompletedQuestParticipants();
+    await clearCompletedQuestParticipants();
     await insertDailyQuests();
 }, {
     scheduled: true,
