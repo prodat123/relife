@@ -149,7 +149,7 @@ const insertDailyQuests = async () => {
 
 
 const clearCompletedQuestParticipants = async () => {
-    const query = `DELETE FROM quest_participants WHERE completed = 1;`;
+    const query = `DELETE FROM quest_participants WHERE completed = 0;`;
 
     try {
         const [results] = await db.query(query);
@@ -161,7 +161,7 @@ const clearCompletedQuestParticipants = async () => {
 
 cron.schedule('0 0 * * *', async () => { 
     console.log(`[${new Date().toISOString()}] Running daily quest insertion...`);
-    await clearCompletedQuestParticipants();
+    // await clearCompletedQuestParticipants();
     await insertDailyQuests();
 }, {
     scheduled: true,
@@ -689,10 +689,6 @@ app.post('/update-equipment', async (req, res) => {
         res.status(500).json({ error: 'Failed to update equipment and stats' });
     }
 });
-
-
-
-
 
 
 app.get('/items/:itemId', async (req, res) => {
