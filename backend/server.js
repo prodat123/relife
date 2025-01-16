@@ -6,7 +6,6 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
 const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
-const axios = require('axios');
 
 
 app.use(bodyParser.json());
@@ -25,18 +24,18 @@ app.post('/auth/signup', async (req, res) => {
     });
 
     try {
-        const recaptchaResponse = await axios.post(
-            `https://www.google.com/recaptcha/api/siteverify`,
-            null,
-            {
-                params: {
-                    secret: '6LccnbkqAAAAAF7Sr0AwCbWjwOMQWOYvk_VyehSE',
-                    response: recaptchaToken,
-                },
-            }
-        );
+        // const recaptchaResponse = await axios.post(
+        //     `https://www.google.com/recaptcha/api/siteverify`,
+        //     null,
+        //     {
+        //         params: {
+        //             secret: '6LccnbkqAAAAAF7Sr0AwCbWjwOMQWOYvk_VyehSE',
+        //             response: recaptchaToken,
+        //         },
+        //     }
+        // );
 
-        if (!recaptchaResponse.data.success) {
+        if (!recaptchaToken) {
             return res.status(400).json({ message: 'reCAPTCHA verification failed' });
         }
         // Check if the username already exists
