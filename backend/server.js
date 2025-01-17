@@ -459,7 +459,7 @@ app.get('/quests/completed', async (req, res) => {
              FROM quest_participants qp
              INNER JOIN quests q ON qp.quest_id = q.id
              WHERE qp.user_id = ? AND qp.completed = 1 AND qp.completed_at = ?`,
-            [userId, formattedDate]  // Use the currentDate for filtering
+            [userId, currentDate]  // Use the currentDate for filtering
         );
 
         // Return the completed quests
