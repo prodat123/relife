@@ -478,7 +478,7 @@ app.post('/quests/finish', async (req, res) => {
 
     try {
 
-        const completionDate = completedAt ? new Date(completedAt) : new Date();
+        const completionDate = new Date();
 
         // Check if the quest is already completed today
         const [existing] = await db.query(
