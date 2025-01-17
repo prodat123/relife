@@ -449,11 +449,9 @@ app.get('/quests/completed', async (req, res) => {
 
     try {
 
-        const currentDate = new Date();
-        currentDate.setDate(currentDate.getDate() + 1); // Add one day
-        const formattedDate = currentDate.toISOString().split('T')[0]; // 'YYYY-MM-DD'
+        
         // Get the current date (formatted as 'YYYY-MM-DD')
-        // const currentDate = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
+        const currentDate = new Date().toISOString().split('T')[0]; // 'YYYY-MM-DD'
 
         // Query to fetch completed quests for the given user where completed = true and completed_at is today
         const [completedQuests] = await db.query(
