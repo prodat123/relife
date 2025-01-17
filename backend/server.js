@@ -477,10 +477,13 @@ app.post('/quests/finish', async (req, res) => {
     const { questId, userId } = req.body;
 
     try {
+
+        const completionDate = completedAt ? new Date(completedAt) : new Date();
+
         // Check if the quest is already completed today
         const [existing] = await db.query(
-            `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ? AND completed = 1 AND DATE(completed_at) = CURDATE()`,
-            [questId, userId]
+            `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ? AND completed = 1 AND DATE(completed_at) = ?`,
+            [questId, userId, completionDate.toISOString().split('T')[0]]
         );
         if (existing.length > 0) {
             return res.status(400).json({ error: 'Quest already completed today.' });
@@ -500,9 +503,9 @@ app.post('/quests/finish', async (req, res) => {
         // Mark quest as completed
         await db.query(
             `UPDATE quest_participants
-             SET completed = 1, completed_at = NOW()
+             SET completed = 1, completed_at = ?
              WHERE quest_id = ? AND user_id = ?`,
-            [questId, userId]
+            [completionDate.toISOString().split('T')[0], questId, userId]
         );
 
         // Update user's experience points
@@ -601,8 +604,9 @@ app.post('/quests/finish', async (req, res) => {
 
 
 app.get('/quests/daily', async (req, res) => {
+    
     const userId = req.query.userId;
-    console.log('Received userId:', userId);
+
 
     try {
         // Set timezone to Pacific Time (PST/PDT)
