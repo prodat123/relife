@@ -1194,6 +1194,24 @@ app.get('/tower-leaderboard', async (req, res) => {
     }
 });
 
+app.post('/add-to-tower-leaderboard', (req, res) => {
+    const { username, userId, floor, achievedAt } = req.body;
+
+    // Ensure data is provided
+    if (!username || !userId || !floor || !achievedAt) {
+        return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    // Insert user data into the leaderboard table
+    const query = 'INSERT INTO tower_leaderboard (username, userId, floor, date) VALUES (?, ?, ?, ?)';
+    db.query(query, [username, userId, floor, achievedAt], (err, result) => {
+        if (err) {
+            return res.status(500).json({ message: 'Error adding to leaderboard', error: err });
+        }
+        return res.status(200).json({ message: 'User added to leaderboard', data: result });
+    });
+});
+
 
 app.listen(3001, () => {
     console.log('✅ Backend running on HTTP at port 3001');
