@@ -333,7 +333,7 @@ app.get('/quest/:id', async (req, res) => {
 });
 
 app.post('/quests/select', async (req, res) => {
-    const { questId, userId } = req.body;
+    const { questId, userId, currentDate } = req.body;
 
     if (!questId || !userId) {
         return res.status(400).json({ error: 'Quest ID and User ID are required' });
@@ -362,7 +362,7 @@ app.post('/quests/select', async (req, res) => {
             // Update progress to 'Started' and joined_at if not already done
             await db.query(
                 'UPDATE quest_participants SET progress = ?, joined_at = ?, completed = ? WHERE id = ?',
-                ['Started', new Date(), false, existingParticipant[0].id]
+                ['Started', currentDate, false, existingParticipant[0].id]
             );
 
             return res.status(200).json({ message: 'Quest progress updated to Started' });
@@ -371,7 +371,7 @@ app.post('/quests/select', async (req, res) => {
         // If user is not a participant, add them to the quest
         await db.query(
             'INSERT INTO quest_participants (quest_id, user_id, progress, completed, joined_at, completed_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [questId, userId, 'Started', false, new Date(), null]
+            [questId, userId, 'Started', false, currentDate, null]
         );
 
         res.status(201).json({ message: 'User added as participant with progress Started' });
