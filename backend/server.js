@@ -1215,9 +1215,18 @@ app.post('/add-to-tower-leaderboard', (req, res) => {
         if (err) {
             return res.status(500).json({ message: 'Error adding to leaderboard', error: err });
         }
-        return res.status(200).json({ message: 'User leaderboard data updated', data: result });
+
+        // Check if the query affected any rows
+        const isUpdated = result.affectedRows > 1;  // More than 1 means it was an update, not an insert
+        
+        if (isUpdated) {
+            return res.status(200).json({ message: 'Leaderboard updated', data: result });
+        } else {
+            return res.status(200).json({ message: 'Leaderboard entry added', data: result });
+        }
     });
 });
+
 
 
 
