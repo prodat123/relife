@@ -440,7 +440,7 @@ app.get('/quests/active', async (req, res) => {
 
 // Fetch completed quests the user has participated in
 app.get('/quests/completed', async (req, res) => {
-    const { userId } = req.query;
+    const { userId, currentDate } = req.query;
 
     // Validate if the user ID is provided
     if (!userId) {
@@ -451,7 +451,7 @@ app.get('/quests/completed', async (req, res) => {
 
         
         // Get the current date (formatted as 'YYYY-MM-DD')
-        const currentDate = new Date().toLocaleDateString('en-CA');  // 'YYYY-MM-DD'
+        // const currentDate = new Date().toLocaleDateString('en-CA');  // 'YYYY-MM-DD'
 
         // Query to fetch completed quests for the given user where completed = true and completed_at is today
         const [completedQuests] = await db.query(
