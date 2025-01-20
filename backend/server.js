@@ -1184,6 +1184,16 @@ app.post('/spin-wheel', async (req, res) => {
     }
 });
 
+app.get('/tower-leaderboard', async (req, res) => {
+    try {
+        const [ leaderboard ] = await db.query('SELECT * FROM tower_leaderboard');
+        res.json(leaderboard);
+    } catch (error) {
+        console.error('Error fetching quests:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+});
+
 
 app.listen(3001, () => {
     console.log('✅ Backend running on HTTP at port 3001');
