@@ -448,11 +448,10 @@ app.get('/quests/completed', async (req, res) => {
     }
 
     try {
-        // Get the local current date formatted as 'YYYY-MM-DD'
-        const now = new Date();
-        const currentDate = now.getFullYear() + '-' +
-                            String(now.getMonth() + 1).padStart(2, '0') + '-' +
-                            String(now.getDate()).padStart(2, '0');
+
+        
+        // Get the current date (formatted as 'YYYY-MM-DD')
+        const currentDate = new Date().toLocaleDateString('en-CA');  // 'YYYY-MM-DD'
 
         // Query to fetch completed quests for the given user where completed = true and completed_at is today
         const [completedQuests] = await db.query(
@@ -460,7 +459,7 @@ app.get('/quests/completed', async (req, res) => {
              FROM quest_participants qp
              INNER JOIN quests q ON qp.quest_id = q.id
              WHERE qp.user_id = ? AND qp.completed = 1 AND qp.completed_at = ?`,
-            [userId, currentDate]  // Use the correctly formatted local date
+            [userId, currentDate]  // Use the currentDate for filtering
         );
 
         // Return the completed quests
@@ -471,7 +470,6 @@ app.get('/quests/completed', async (req, res) => {
         res.status(500).json({ error: 'An error occurred while fetching completed quests' });
     }
 });
-
 
 
 
