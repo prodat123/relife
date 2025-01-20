@@ -1202,15 +1202,23 @@ app.post('/add-to-tower-leaderboard', (req, res) => {
         return res.status(400).json({ message: 'Missing required fields' });
     }
 
-    // Insert user data into the leaderboard table
-    const query = 'INSERT INTO tower_leaderboard (username, userId, floor, date) VALUES (?, ?, ?, ?)';
+    // Query to insert or update user data in the leaderboard table
+    const query = `
+        INSERT INTO tower_leaderboard (username, userId, floor, date)
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            floor = VALUES(floor),
+            date = VALUES(date)
+    `;
+
     db.query(query, [username, userId, floor, achievedAt], (err, result) => {
         if (err) {
             return res.status(500).json({ message: 'Error adding to leaderboard', error: err });
         }
-        return res.status(200).json({ message: 'User added to leaderboard', data: result });
+        return res.status(200).json({ message: 'User leaderboard data updated', data: result });
     });
 });
+
 
 
 app.listen(3001, () => {
