@@ -1186,13 +1186,14 @@ app.post('/spin-wheel', async (req, res) => {
 
 app.get('/tower-leaderboard', async (req, res) => {
     try {
-        const [ leaderboard ] = await db.query('SELECT * FROM tower_leaderboard');
+        const [leaderboard] = await db.query('SELECT * FROM tower_leaderboard ORDER BY floor DESC');
         res.json(leaderboard);
     } catch (error) {
-        console.error('Error fetching quests:', error);
+        console.error('Error fetching leaderboard:', error);
         res.status(500).json({ message: 'Internal Server Error' });
     }
 });
+
 
 app.post('/add-to-tower-leaderboard', (req, res) => {
     const { username, userId, floor, achievedAt } = req.body;
