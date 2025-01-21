@@ -1228,6 +1228,33 @@ app.post('/add-to-tower-leaderboard', (req, res) => {
 });
 
 
+app.post('/vows', async (req, res) => {
+    try {
+        const { name, description, experience_reward, stat_reward, difficulty, created_by, status, created_at, completed_at } = req.body;
+        
+        const sql = `INSERT INTO vows (name, description, experience_reward, stat_reward, difficulty, created_by, status, created_at, completed_at) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+        await db.query(sql, [name, description, experience_reward, JSON.stringify(stat_reward), difficulty, created_by, status, created_at, completed_at]);
+
+        res.status(201).json({ message: 'Vow added successfully' });
+    } catch (error) {
+        console.error('Error adding vow:', error);
+        res.status(500).json({ error: 'Failed to add vow' });
+    }
+});
+
+// GET: Fetch all vows
+app.get('/vows', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM vows ORDER BY created_at DESC');
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching vows:', error);
+        res.status(500).json({ error: 'Failed to fetch vows' });
+    }
+});
+
 
 
 app.listen(3001, () => {
