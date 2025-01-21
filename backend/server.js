@@ -1230,12 +1230,12 @@ app.post('/add-to-tower-leaderboard', (req, res) => {
 
 app.post('/vows', async (req, res) => {
     try {
-        const { name, description, experience_reward, stat_reward, difficulty, created_by, status, created_at, completed_at } = req.body;
+        const { name, description, experience_reward, stat_reward, difficulty, created_by, status, created_at, completed_at, deadline } = req.body;
         
-        const sql = `INSERT INTO vows (name, description, experience_reward, stat_reward, difficulty, created_by, status, created_at, completed_at) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        const sql = `INSERT INTO vows (name, description, experience_reward, stat_reward, difficulty, created_by, status, created_at, completed_at, deadline) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-        await db.query(sql, [name, description, experience_reward, JSON.stringify(stat_reward), difficulty, created_by, status, created_at, completed_at]);
+        await db.query(sql, [name, description, experience_reward, JSON.stringify(stat_reward), difficulty, created_by, status, created_at, completed_at, deadline]);
 
         res.status(201).json({ message: 'Vow added successfully' });
     } catch (error) {
@@ -1244,16 +1244,23 @@ app.post('/vows', async (req, res) => {
     }
 });
 
-// GET: Fetch all vows
+// GET: Fetch vows for a specific user
 app.get('/vows', async (req, res) => {
+    const { userId } = req.query;
+
+    if (!userId) {
+        return res.status(400).json({ error: 'User ID is required' });
+    }
+
     try {
-        const [rows] = await db.query('SELECT * FROM vows ORDER BY created_at DESC');
+        const [rows] = await db.query('SELECT * FROM vows WHERE created_by = ? ORDER BY created_at DESC', [userId]);
         res.json(rows);
     } catch (error) {
         console.error('Error fetching vows:', error);
         res.status(500).json({ error: 'Failed to fetch vows' });
     }
 });
+
 
 
 
