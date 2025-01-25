@@ -1409,7 +1409,100 @@ cron.schedule('0 0 * * *', async () => {
     timezone: 'America/Los_Angeles' // California Timezone
 });
 
+app.get('/completed-quests-stats', async (req, res) => {
+    const { userId } = req.query;
 
+    if (!userId) {
+        return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    try {
+        // Get the current date and the date 7 days ago using JavaScript's Date object
+        const currentDate = new Date();
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(currentDate.getDate() - 7);
+
+        // Convert to MySQL compatible format (YYYY-MM-DD)
+        const formatDate = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0'); // Add 1 because months are 0-based
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        const currentDateStr = formatDate(currentDate);
+        const oneWeekAgoStr = formatDate(oneWeekAgo);
+
+        // Query to get all completed quests within the last week
+        const [questParticipants] = await db.query(
+            `SELECT qp.quest_id, qp.completed_at
+             FROM quest_participants qp
+             WHERE qp.user_id = ? AND qp.completed = 1
+             AND qp.completed_at >= ? AND qp.completed_at <= ?`,
+            [userId, oneWeekAgoStr, currentDateStr]
+        );
+
+        // If no quests found, return empty
+        if (questParticipants.length === 0) {
+            return res.json([]);
+        }
+
+        // Get all the quest stat_rewards for the fetched quest_ids
+        const questIds = questParticipants.map(qp => qp.quest_id);
+        const [quests] = await db.query(
+            'SELECT id, stat_reward FROM quests WHERE id IN (?)',
+            [questIds]
+        );
+
+        // Prepare a map of quest_id -> stat_reward
+        const questRewards = quests.reduce((acc, quest) => {
+            // Parse the stat_reward from JSON string into an object
+            const parsedStatReward = JSON.parse(quest.stat_reward);
+            acc[quest.quest_id] = parsedStatReward;
+            return acc;
+        }, {});
+
+        // Aggregate stats per day
+        const statsPerDay = {};
+
+        questParticipants.forEach(participant => {
+            const completedDate = new Date(participant.completed_at);
+            const completedDateStr = formatDate(completedDate); // Get the date of completion
+
+            const statReward = questRewards[participant.quest_id];
+
+            if (!statReward) return;
+
+            // Initialize the day's stats if not already
+            if (!statsPerDay[completedDateStr]) {
+                statsPerDay[completedDateStr] = {
+                    physical_strength: 0,
+                    bravery: 0,
+                    intelligence: 0,
+                    stamina: 0
+                };
+            }
+
+            // Aggregate the stats (assuming stat_reward contains { physical_strength: 5, bravery: 3, ... })
+            statsPerDay[completedDateStr].physical_strength += statReward.physical_strength || 0;
+            statsPerDay[completedDateStr].bravery += statReward.bravery || 0;
+            statsPerDay[completedDateStr].intelligence += statReward.intelligence || 0;
+            statsPerDay[completedDateStr].stamina += statReward.stamina || 0;
+        });
+
+        // Convert the statsPerDay object to an array for easier rendering
+        const result = Object.keys(statsPerDay).map(date => ({
+            date,
+            stats: statsPerDay[date],
+        }));
+
+        // Return the aggregated stats per day
+        res.json(result);
+    } catch (error) {
+        console.error('Error fetching completed quests stats:', error);
+        res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+});
 
 
 app.listen(3001, () => {
