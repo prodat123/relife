@@ -1254,13 +1254,17 @@ app.get('/vows', async (req, res) => {
     }
 
     try {
-        const [rows] = await db.query('SELECT * FROM vows WHERE created_by = ? ORDER BY created_at DESC', [userId]);
+        const [rows] = await db.query(
+            'SELECT * FROM vows WHERE created_by = ? AND status = "active" ORDER BY created_at DESC',
+            [userId]
+        );
         res.json(rows);
     } catch (error) {
         console.error('Error fetching vows:', error);
         res.status(500).json({ error: 'Failed to fetch vows' });
     }
 });
+
 
 app.post('/vows/finish', async (req, res) => {
     const { vowId, userId, completedDate } = req.body;
