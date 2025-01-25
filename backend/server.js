@@ -1255,7 +1255,14 @@ app.get('/vows', async (req, res) => {
 
     try {
         const [rows] = await db.query(
-            'SELECT * FROM vows WHERE created_by = ? AND status IN ("active", "incomplete", "completed") ORDER BY created_at DESC',
+            'SELECT * FROM vows WHERE created_by = ? AND status IN ("active", "incomplete", "completed") ' +
+            'ORDER BY ' +
+            'CASE ' +
+            '    WHEN status = "active" THEN 1 ' +
+            '    WHEN status = "incomplete" THEN 2 ' +
+            '    WHEN status = "completed" THEN 3 ' +
+            '    ELSE 4 ' + // In case there are other statuses not expected
+            'END, created_at DESC',
             [userId]
         );        
         res.json(rows);
@@ -1264,6 +1271,7 @@ app.get('/vows', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch vows' });
     }
 });
+
 
 
 app.post('/vows/finish', async (req, res) => {
