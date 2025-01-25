@@ -1262,6 +1262,86 @@ app.get('/vows', async (req, res) => {
     }
 });
 
+app.post('/vows/finish', async (req, res) => {
+    const { vowId, userId, completedDate } = req.body;
+
+    try {
+
+        const completionDate = completedDate ? completedDate : new Date().toISOString().split('T')[0];
+
+        // Check if the quest is already completed today
+        // const [existing] = await db.query(
+        //     `SELECT * FROM vows WHERE id = ? AND created_by = ? AND completed = 1 AND DATE(completed_at) = ?`,
+        //     [questId, userId, completionDate]
+        // );
+        // if (existing.length > 0) {
+        //     return res.status(400).json({ error: 'Quest already completed today.' });
+        // }
+
+        // Retrieve the quest's rewards (experience, item, and stat rewards)
+        const [quest] = await db.query(
+            `SELECT experience_reward, stat_reward FROM vows WHERE id = ?`,
+            [vowId]
+        );
+        if (quest.length === 0) {
+            return res.status(404).json({ error: 'Quest not found.' });
+        }
+
+        const { experience_reward: experienceReward, stat_reward: statReward } = quest[0];
+
+        // Mark quest as completed
+        await db.query(
+            `UPDATE vows
+             SET status = 'completed', completed_at = ?
+             WHERE id = ? AND created_by = ?`,
+            [completionDate, vowId, userId]
+        );
+
+        // Update user's experience points
+        if (experienceReward) {
+            await db.query(
+                `UPDATE users
+                 SET experience = experience + ?
+                 WHERE id = ?`,
+                [experienceReward, userId]
+            );
+        }
+
+        // Update user's stats if statReward exists
+        if (statReward) {
+            const statUpdates = JSON.parse(statReward); // Assuming stat_reward is stored as JSON string
+            
+            // Fetch current user stats
+            const [user] = await db.query(
+                `SELECT stats FROM users WHERE id = ?`,
+                [userId]
+            );
+            let userStats = JSON.parse(user[0].stats || '{}'); // Assuming stats are stored in JSON format
+
+            // Apply stat rewards
+            for (let stat in statUpdates) {
+                if (userStats[stat]) {
+                    userStats[stat] += statUpdates[stat];
+                } else {
+                    userStats[stat] = statUpdates[stat];
+                }
+            }
+
+            // Save updated stats back to the database
+            await db.query(
+                `UPDATE users
+                 SET stats = ?
+                 WHERE id = ?`,
+                [JSON.stringify(userStats), userId]
+            );
+        }
+
+        res.json({ success: true, message: 'Quest marked as finished and rewards applied.' });
+    } catch (err) {
+        console.error('Error finishing quest:', err);
+        res.status(500).json({ error: 'Failed to mark quest as finished.' });
+    }
+});
 
 
 
