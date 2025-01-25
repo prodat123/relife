@@ -1255,7 +1255,7 @@ app.get('/vows', async (req, res) => {
 
     try {
         const [rows] = await db.query(
-            'SELECT * FROM vows WHERE created_by = ? AND status IN ("active", "inactive") ORDER BY created_at DESC',
+            'SELECT * FROM vows WHERE created_by = ? AND status IN ("active", "incomplete") ORDER BY created_at DESC',
             [userId]
         );        
         res.json(rows);
