@@ -1255,9 +1255,9 @@ app.get('/vows', async (req, res) => {
 
     try {
         const [rows] = await db.query(
-            'SELECT * FROM vows WHERE created_by = ? AND status = "active" ORDER BY created_at DESC',
+            'SELECT * FROM vows WHERE created_by = ? AND status IN ("active", "inactive") ORDER BY created_at DESC',
             [userId]
-        );
+        );        
         res.json(rows);
     } catch (error) {
         console.error('Error fetching vows:', error);
@@ -1346,6 +1346,61 @@ app.post('/vows/finish', async (req, res) => {
         res.status(500).json({ error: 'Failed to mark quest as finished.' });
     }
 });
+
+const checkAndUpdateVows = async () => {
+    try {
+        console.log("Checking for overdue vows...");
+
+        // Get all active vows from the database
+        const [vows] = await db.query('SELECT * FROM vows WHERE status = "active"');
+
+        const currentDate = moment().tz('America/Los_Angeles').startOf('day'); // Set to local time
+
+        for (const vow of vows) {
+            const vowDeadline = moment(vow.deadline).tz('America/Los_Angeles').startOf('day').add(1, 'days');
+
+            if (currentDate.isAfter(vowDeadline)) {
+                // Deadline passed, mark vow as incomplete
+                await db.query('UPDATE vows SET status = "incomplete" WHERE id = ?', [vow.id]);
+
+                console.log(`Vow ID ${vow.id} marked as incomplete.`);
+
+                // Fetch user stats from the users table
+                const [userRows] = await db.query('SELECT stats FROM users WHERE id = ?', [vow.created_by]);
+                
+                if (userRows.length > 0) {
+                    let userStats = JSON.parse(userRows[0].stats);
+                    let statRewards = JSON.parse(vow.stat_rewards);
+
+                    // Subtract the stat rewards from user stats
+                    for (const stat in statRewards) {
+                        if (userStats[stat] !== undefined) {
+                            userStats[stat] = Math.max(0, userStats[stat] - (statRewards[stat] * 2)); // Ensure no negative values
+                        }
+                    }
+
+                    // Update the user's stats in the database
+                    await db.query('UPDATE users SET stats = ? WHERE id = ?', [JSON.stringify(userStats), vow.created_by]);
+
+                    console.log(`User ID ${vow.created_by} stats updated.`);
+                }
+            }
+        }
+        
+        console.log("Vow check complete.");
+    } catch (error) {
+        console.error("Error processing vows:", error);
+    }
+};
+
+cron.schedule('0 0 * * *', async () => { 
+    console.log(`[${new Date().toISOString()}] Running daily vow checks...`);
+    await checkAndUpdateVows();
+}, {
+    scheduled: true,
+    timezone: 'America/Los_Angeles' // California Timezone
+});
+
 
 
 
