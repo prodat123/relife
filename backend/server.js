@@ -1421,13 +1421,13 @@ app.get('/completed-quests-stats', async (req, res) => {
     }
 
     try {
-        // Use the provided date directly
+        // Ensure the date from the frontend is in YYYY-MM-DD format (no need to convert it if already in this format)
         const currentDateStr = date;
 
-        // Calculate one week ago by adjusting the date (convert it to a Date object)
-        const oneWeekAgoDate = new Date(date);
-        oneWeekAgoDate.setDate(oneWeekAgoDate.getDate() - 7);
-        const oneWeekAgoStr = formatDate(oneWeekAgoDate);
+        // Calculate one week ago by adjusting the date (convert to Date object for calculation)
+        const oneWeekAgoDate = new Date(date); // Use the date provided directly
+        oneWeekAgoDate.setDate(oneWeekAgoDate.getDate() - 7); // Subtract 7 days for one week ago
+        const oneWeekAgoStr = formatDate(oneWeekAgoDate); // Format the new date to YYYY-MM-DD
 
         // Query to get completed quests within the last week
         const [questParticipants] = await db.query(
@@ -1525,6 +1525,7 @@ app.get('/completed-quests-stats', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch stats' });
     }
 });
+
 
 
 
