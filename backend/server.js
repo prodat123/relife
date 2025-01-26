@@ -1421,13 +1421,14 @@ app.get('/completed-quests-stats', async (req, res) => {
     }
 
     try {
-        // Ensure the date from the frontend is in YYYY-MM-DD format (no need to convert it if already in this format)
-        const currentDateStr = date;
+        const currentDateStr = date; // Use the provided date directly
 
         // Calculate one week ago by adjusting the date (convert to Date object for calculation)
         const oneWeekAgoDate = new Date(date); // Use the date provided directly
         oneWeekAgoDate.setDate(oneWeekAgoDate.getDate() - 7); // Subtract 7 days for one week ago
-        const oneWeekAgoStr = formatDate(oneWeekAgoDate); // Format the new date to YYYY-MM-DD
+
+        // Directly format the date using toISOString()
+        const oneWeekAgoStr = oneWeekAgoDate.toISOString().split('T')[0]; // Format the new date to 'YYYY-MM-DD'
 
         // Query to get completed quests within the last week
         const [questParticipants] = await db.query(
@@ -1453,7 +1454,7 @@ app.get('/completed-quests-stats', async (req, res) => {
             const result = Array.from({ length: 7 }, (_, i) => {
                 const day = new Date();
                 day.setDate(oneWeekAgoDate.getDate() + i);
-                const dateStr = formatDate(day);
+                const dateStr = day.toISOString().split('T')[0]; // Format date
                 return { date: dateStr, stats: { physical_strength: 0, bravery: 0, intelligence: 0, stamina: 0 } };
             });
             return res.json(result);
@@ -1510,7 +1511,7 @@ app.get('/completed-quests-stats', async (req, res) => {
         const result = Array.from({ length: 7 }, (_, i) => {
             const day = new Date();
             day.setDate(oneWeekAgoDate.getDate() + i);
-            const dateStr = formatDate(day);
+            const dateStr = day.toISOString().split('T')[0]; // Format date
 
             const stats = statsPerDay[dateStr] || { physical_strength: 0, bravery: 0, intelligence: 0, stamina: 0 };
 
@@ -1525,6 +1526,7 @@ app.get('/completed-quests-stats', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch stats' });
     }
 });
+
 
 
 
