@@ -1410,7 +1410,7 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 app.get('/completed-quests-stats', async (req, res) => {
-    const { userId } = req.query;
+    const { userId, currentDate } = req.query;
 
     if (!userId) {
         return res.status(400).json({ error: 'User ID is required' });
@@ -1418,7 +1418,7 @@ app.get('/completed-quests-stats', async (req, res) => {
 
     try {
         // Get the current date and the date 7 days ago using JavaScript's Date object
-        const currentDate = new Date();
+        
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(currentDate.getDate() - 7);
 
