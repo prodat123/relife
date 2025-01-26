@@ -1518,6 +1518,30 @@ app.get('/completed-quests-stats', async (req, res) => {
     }
 });
 
+const calculateMedian = (arr) => {
+    // Filter out zeros
+    const nonZeroArr = arr.filter(value => value !== 0);
+
+    // If the filtered array is empty, return 0 (you can modify this behavior if needed)
+    if (nonZeroArr.length === 0) return 0;
+
+    // Sort the array
+    nonZeroArr.sort((a, b) => a - b);
+
+    // Calculate the median
+    const len = nonZeroArr.length;
+
+    // If the length is odd, return the middle element
+    if (len % 2 === 1) {
+        return nonZeroArr[Math.floor(len / 2)];
+    } else {
+        // If the length is even, return the average of the two middle elements
+        const mid = len / 2;
+        return (nonZeroArr[mid - 1] + nonZeroArr[mid]) / 2;
+    }
+};
+
+
 app.get('/total-completed-quests-stats', async (req, res) => {
     try {
         // Get the current date and the date 7 days ago using JavaScript's Date object
@@ -1565,35 +1589,60 @@ app.get('/total-completed-quests-stats', async (req, res) => {
         }, {});
 
         // Aggregate stats for the entire week
-        let totalStats = { physical_strength: 0, bravery: 0, intelligence: 0, stamina: 0 };
-        let totalParticipants = 0;
+        let statsArray = {
+            physical_strength: [],
+            bravery: [],
+            intelligence: [],
+            stamina: []
+        };
 
         questParticipants.forEach(participant => {
             const statReward = questRewards[participant.quest_id];
             if (!statReward) return;
 
-            totalStats.physical_strength += statReward.physical_strength || 0;
-            totalStats.bravery += statReward.bravery || 0;
-            totalStats.intelligence += statReward.intelligence || 0;
-            totalStats.stamina += statReward.stamina || 0;
-            totalParticipants++;
+            if (statReward.physical_strength) statsArray.physical_strength.push(statReward.physical_strength);
+            if (statReward.bravery) statsArray.bravery.push(statReward.bravery);
+            if (statReward.intelligence) statsArray.intelligence.push(statReward.intelligence);
+            if (statReward.stamina) statsArray.stamina.push(statReward.stamina);
         });
 
-        // Calculate the average for each stat
-        if (totalParticipants > 0) {
-            totalStats.physical_strength = totalStats.physical_strength / totalParticipants;
-            totalStats.bravery = totalStats.bravery / totalParticipants;
-            totalStats.intelligence = totalStats.intelligence / totalParticipants;
-            totalStats.stamina = totalStats.stamina / totalParticipants;
-        }
+        // Helper function to calculate the median, excluding zeros
+        // const calculateMedian = (arr) => {
+        //     // Filter out zeros
+        //     const nonZeroArr = arr.filter(value => value !== 0);
+        //     // Sort the array
+        //     nonZeroArr.sort((a, b) => a - b);
+        //     const len = nonZeroArr.length;
 
-        // Return the average stats for the week for all users
+        //     if (len === 0) return 0;  // If no non-zero values, return 0 as median
+
+        //     // Calculate median
+        //     if (len % 2 === 1) {
+        //         return nonZeroArr[Math.floor(len / 2)];
+        //     } else {
+        //         const mid = len / 2;
+        //         return (nonZeroArr[mid - 1] + nonZeroArr[mid]) / 2;
+        //     }
+        // };
+
+        // Calculate median for each stat
+        const totalStats = {
+            physical_strength: calculateMedian(statsArray.physical_strength),
+            bravery: calculateMedian(statsArray.bravery),
+            intelligence: calculateMedian(statsArray.intelligence),
+            stamina: calculateMedian(statsArray.stamina),
+        };
+
+        console.log(totalStats);
+
+        // Return the median stats for the week for all users
         res.json({ stats: totalStats });
     } catch (error) {
         console.error('Error fetching completed quests stats:', error);
         res.status(500).json({ error: 'Failed to fetch stats' });
     }
 });
+
 
 
 
