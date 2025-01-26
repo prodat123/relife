@@ -661,13 +661,13 @@ app.get('/account', async (req, res) => {
         const user = userResults[0];
 
         // Log the user data for debugging
-        console.log("Fetched User Data:", user);
+        // console.log("Fetched User Data:", user);
 
         // Parse inventory from the user's data (stored as a JSON string)
         const inventoryItems = user.inventory ? JSON.parse(user.inventory) : [];
 
         // Log the parsed inventory for debugging
-        console.log("Parsed Inventory Items:", inventoryItems);
+        // console.log("Parsed Inventory Items:", inventoryItems);
 
         // Provide default placeholders for missing slots based on the inventory directly
         const equipment = {
@@ -679,7 +679,7 @@ app.get('/account', async (req, res) => {
         };
 
         // Log the equipment data for debugging
-        console.log("Mapped Equipment Data:", equipment);
+        // console.log("Mapped Equipment Data:", equipment);
 
         // Send the response with user data, inventory, and equipment
         res.status(200).json({
@@ -728,7 +728,7 @@ app.get('/leaderboard', async (req, res) => {
 
 app.post('/update-equipment', async (req, res) => {
     const { userId, slot, itemId, inventory } = req.body;
-    console.log(userId, slot, itemId, inventory);
+    // console.log(userId, slot, itemId, inventory);
 
     // Validate required fields
     if (!userId || !slot || !inventory) {
@@ -1409,6 +1409,12 @@ cron.schedule('0 0 * * *', async () => {
     timezone: 'America/Los_Angeles' // California Timezone
 });
 
+const convertToLocalDate = (utcDate) => {
+    const localDate = new Date(utcDate);
+    localDate.setHours(localDate.getHours() - localDate.getTimezoneOffset() / 60); // Adjust for timezone offset
+    return localDate;
+};
+
 app.get('/completed-quests-stats', async (req, res) => {
     const { userId } = req.query;
 
@@ -1444,7 +1450,14 @@ app.get('/completed-quests-stats', async (req, res) => {
 
         // If no quests found, return empty
         if (questParticipants.length === 0) {
-            return res.json([]);
+            // Generate the past 7 days with all zero stats
+            const result = Array.from({ length: 7 }, (_, i) => {
+                const day = new Date();
+                day.setDate(currentDate.getDate() - (6 - i));
+                const dateStr = formatDate(day);
+                return { date: dateStr, stats: { physical_strength: 0, bravery: 0, intelligence: 0, stamina: 0 } };
+            });
+            return res.json(result);
         }
 
         // Get all the quest stat_rewards for the fetched quest_ids
@@ -1458,7 +1471,7 @@ app.get('/completed-quests-stats', async (req, res) => {
         const questRewards = quests.reduce((acc, quest) => {
             // Parse the stat_reward from JSON string into an object
             const parsedStatReward = JSON.parse(quest.stat_reward);
-            acc[quest.quest_id] = parsedStatReward;
+            acc[quest.id] = parsedStatReward;
             return acc;
         }, {});
 
@@ -1466,8 +1479,11 @@ app.get('/completed-quests-stats', async (req, res) => {
         const statsPerDay = {};
 
         questParticipants.forEach(participant => {
-            const completedDate = new Date(participant.completed_at);
-            const completedDateStr = formatDate(completedDate); // Get the date of completion
+            const completedDateStr = participant.completed_at.slice(0, 10);  // Use the raw string 'YYYY-MM-DD'
+
+            // const completedDate = new Date(participant.completed_at);
+            // const localDate = convertToLocalDate(completedDate);  // Convert UTC to local
+            // const completedDateStr = formatDate(localDate); // Get the date of completion
 
             const statReward = questRewards[participant.quest_id];
 
@@ -1490,11 +1506,19 @@ app.get('/completed-quests-stats', async (req, res) => {
             statsPerDay[completedDateStr].stamina += statReward.stamina || 0;
         });
 
-        // Convert the statsPerDay object to an array for easier rendering
-        const result = Object.keys(statsPerDay).map(date => ({
-            date,
-            stats: statsPerDay[date],
-        }));
+        // Generate the past 7 days with stats, including days with no data (set to 0)
+        const result = Array.from({ length: 7 }, (_, i) => {
+            const day = new Date();
+            day.setDate(currentDate.getDate() - (6 - i));
+            const dateStr = formatDate(day);
+
+            // Use the stats for the day if available, otherwise set to 0
+            const stats = statsPerDay[dateStr] || { physical_strength: 0, bravery: 0, intelligence: 0, stamina: 0 };
+
+            return { date: dateStr, stats };
+        });
+
+        console.log(result);
 
         // Return the aggregated stats per day
         res.json(result);
@@ -1503,6 +1527,7 @@ app.get('/completed-quests-stats', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch stats' });
     }
 });
+
 
 
 app.listen(3001, () => {
