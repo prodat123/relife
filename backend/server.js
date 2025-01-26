@@ -1425,7 +1425,7 @@ app.get('/completed-quests-stats', async (req, res) => {
 
         // Calculate one week ago by adjusting the date (convert to Date object for calculation)
         const oneWeekAgoDate = new Date(date); // Use the date provided directly
-        oneWeekAgoDate.setDate(oneWeekAgoDate.getDate() - 7); // Subtract 7 days for one week ago
+        oneWeekAgoDate.setDate(oneWeekAgoDate.getDate() - 6); // Subtract 7 days for one week ago
 
         // Directly format the date using toISOString()
         const oneWeekAgoStr = oneWeekAgoDate.toISOString().split('T')[0]; // Format the new date to 'YYYY-MM-DD'
@@ -1452,7 +1452,7 @@ app.get('/completed-quests-stats', async (req, res) => {
         // If no quests or vows found, return empty
         if (questParticipants.length === 0 && vows.length === 0) {
             const result = Array.from({ length: 7 }, (_, i) => {
-                const day = new Date();
+                const day = new Date(oneWeekAgoDate);
                 day.setDate(oneWeekAgoDate.getDate() + i);
                 const dateStr = day.toISOString().split('T')[0]; // Format date
                 return { date: dateStr, stats: { physical_strength: 0, bravery: 0, intelligence: 0, stamina: 0 } };
@@ -1526,9 +1526,6 @@ app.get('/completed-quests-stats', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch stats' });
     }
 });
-
-
-
 
 
 app.get('/total-completed-quests-stats', async (req, res) => {
