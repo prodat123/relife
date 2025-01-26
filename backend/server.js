@@ -1416,22 +1416,18 @@ app.get('/completed-quests-stats', async (req, res) => {
         return res.status(400).json({ error: 'User ID is required' });
     }
 
+    if (!date) {
+        return res.status(400).json({ error: 'Date is required' });
+    }
+
     try {
-        // Get the current date and the date 7 days ago
-        const currentDate = new Date(date);
-        const oneWeekAgo = new Date(date);
-        oneWeekAgo.setDate(currentDate.getDate() - 7);
+        // Use the provided date directly
+        const currentDateStr = date;
 
-        // Convert to MySQL compatible format (YYYY-MM-DD)
-        const formatDate = (date) => {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
-
-        const currentDateStr = formatDate(currentDate);
-        const oneWeekAgoStr = formatDate(oneWeekAgo);
+        // Calculate one week ago by adjusting the date (convert it to a Date object)
+        const oneWeekAgoDate = new Date(date);
+        oneWeekAgoDate.setDate(oneWeekAgoDate.getDate() - 7);
+        const oneWeekAgoStr = formatDate(oneWeekAgoDate);
 
         // Query to get completed quests within the last week
         const [questParticipants] = await db.query(
@@ -1456,7 +1452,7 @@ app.get('/completed-quests-stats', async (req, res) => {
         if (questParticipants.length === 0 && vows.length === 0) {
             const result = Array.from({ length: 7 }, (_, i) => {
                 const day = new Date();
-                day.setDate(currentDate.getDate() - (6 - i));
+                day.setDate(oneWeekAgoDate.getDate() + i);
                 const dateStr = formatDate(day);
                 return { date: dateStr, stats: { physical_strength: 0, bravery: 0, intelligence: 0, stamina: 0 } };
             });
@@ -1513,7 +1509,7 @@ app.get('/completed-quests-stats', async (req, res) => {
         // Generate past 7 days with stats, including days with no data (set to 0)
         const result = Array.from({ length: 7 }, (_, i) => {
             const day = new Date();
-            day.setDate(currentDate.getDate() - (6 - i));
+            day.setDate(oneWeekAgoDate.getDate() + i);
             const dateStr = formatDate(day);
 
             const stats = statsPerDay[dateStr] || { physical_strength: 0, bravery: 0, intelligence: 0, stamina: 0 };
@@ -1529,6 +1525,7 @@ app.get('/completed-quests-stats', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch stats' });
     }
 });
+
 
 
 app.get('/total-completed-quests-stats', async (req, res) => {
