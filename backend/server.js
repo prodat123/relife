@@ -1409,12 +1409,6 @@ cron.schedule('0 0 * * *', async () => {
     timezone: 'America/Los_Angeles' // California Timezone
 });
 
-const convertToLocalDate = (utcDate) => {
-    const localDate = new Date(utcDate);
-    localDate.setHours(localDate.getHours() - localDate.getTimezoneOffset() / 60); // Adjust for timezone offset
-    return localDate;
-};
-
 app.get('/completed-quests-stats', async (req, res) => {
     const { userId } = req.query;
 
@@ -1481,10 +1475,6 @@ app.get('/completed-quests-stats', async (req, res) => {
         questParticipants.forEach(participant => {
             const completedDateStr = participant.completed_at.slice(0, 10);  // Use the raw string 'YYYY-MM-DD'
 
-            // const completedDate = new Date(participant.completed_at);
-            // const localDate = convertToLocalDate(completedDate);  // Convert UTC to local
-            // const completedDateStr = formatDate(localDate); // Get the date of completion
-
             const statReward = questRewards[participant.quest_id];
 
             if (!statReward) return;
@@ -1527,6 +1517,84 @@ app.get('/completed-quests-stats', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch stats' });
     }
 });
+
+app.get('/total-completed-quests-stats', async (req, res) => {
+    try {
+        // Get the current date and the date 7 days ago using JavaScript's Date object
+        const currentDate = new Date();
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(currentDate.getDate() - 7);
+
+        // Convert to MySQL compatible format (YYYY-MM-DD)
+        const formatDate = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        const currentDateStr = formatDate(currentDate);
+        const oneWeekAgoStr = formatDate(oneWeekAgo);
+
+        // Query to get all completed quests within the last week for ALL users
+        const [questParticipants] = await db.query(
+            `SELECT qp.quest_id, qp.completed_at, qp.user_id
+             FROM quest_participants qp
+             WHERE qp.completed = 1
+             AND qp.completed_at >= ? AND qp.completed_at <= ?`,
+            [oneWeekAgoStr, currentDateStr]
+        );
+
+        if (questParticipants.length === 0) {
+            // Return stats with zero values for the week if no quests completed
+            return res.json({ stats: { physical_strength: 0, bravery: 0, intelligence: 0, stamina: 0 } });
+        }
+
+        // Get all the quest stat_rewards for the fetched quest_ids
+        const questIds = questParticipants.map(qp => qp.quest_id);
+        const [quests] = await db.query(
+            'SELECT id, stat_reward FROM quests WHERE id IN (?)',
+            [questIds]
+        );
+
+        // Prepare a map of quest_id -> stat_reward
+        const questRewards = quests.reduce((acc, quest) => {
+            const parsedStatReward = JSON.parse(quest.stat_reward);
+            acc[quest.id] = parsedStatReward;
+            return acc;
+        }, {});
+
+        // Aggregate stats for the entire week
+        let totalStats = { physical_strength: 0, bravery: 0, intelligence: 0, stamina: 0 };
+        let totalParticipants = 0;
+
+        questParticipants.forEach(participant => {
+            const statReward = questRewards[participant.quest_id];
+            if (!statReward) return;
+
+            totalStats.physical_strength += statReward.physical_strength || 0;
+            totalStats.bravery += statReward.bravery || 0;
+            totalStats.intelligence += statReward.intelligence || 0;
+            totalStats.stamina += statReward.stamina || 0;
+            totalParticipants++;
+        });
+
+        // Calculate the average for each stat
+        if (totalParticipants > 0) {
+            totalStats.physical_strength = totalStats.physical_strength / totalParticipants;
+            totalStats.bravery = totalStats.bravery / totalParticipants;
+            totalStats.intelligence = totalStats.intelligence / totalParticipants;
+            totalStats.stamina = totalStats.stamina / totalParticipants;
+        }
+
+        // Return the average stats for the week for all users
+        res.json({ stats: totalStats });
+    } catch (error) {
+        console.error('Error fetching completed quests stats:', error);
+        res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+});
+
 
 
 
