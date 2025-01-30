@@ -6,11 +6,8 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
 const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
-const axios = require("axios");
 
 app.use(bodyParser.json());
-
-const allowedOrigins = ['https://relifehabits.com'];
 
 app.use(cors());
 
