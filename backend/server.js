@@ -10,7 +10,13 @@ const axios = require("axios");
 
 app.use(bodyParser.json());
 
-app.use(cors());
+const allowedOrigins = ['https://relifehabits.com'];
+
+app.use(cors({
+    origin: allowedOrigins,
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 
 const RECAPTCHA_SECRET_KEY = '6LccnbkqAAAAACoKQh3TQPweZIl0xNTL8pthX3Un';
 
