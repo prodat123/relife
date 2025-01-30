@@ -6,15 +6,16 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
 const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
-
+const axios = require("axios");
 
 app.use(bodyParser.json());
 
 app.use(cors());
 
+const RECAPTCHA_SECRET_KEY = '6LccnbkqAAAAACoKQh3TQPweZIl0xNTL8pthX3Un';
 
 app.post('/auth/signup', async (req, res) => {
-    const { username, password, email, age, recaptchaToken  } = req.body;
+    const { username, password, email, age, recaptchaToken } = req.body;
 
     const defaultStats = JSON.stringify({
         physical_strength: 1,
@@ -23,21 +24,28 @@ app.post('/auth/signup', async (req, res) => {
         stamina: 1,
     });
 
-    try {
-        // const recaptchaResponse = await axios.post(
-        //     `https://www.google.com/recaptcha/api/siteverify`,
-        //     null,
-        //     {
-        //         params: {
-        //             secret: '6LccnbkqAAAAAF7Sr0AwCbWjwOMQWOYvk_VyehSE',
-        //             response: recaptchaToken,
-        //         },
-        //     }
-        // );
+    if (!recaptchaToken) {
+        return res.status(400).json({ message: 'reCAPTCHA token is missing' });
+    }
 
-        if (!recaptchaToken) {
-            return res.status(400).json({ message: 'reCAPTCHA verification failed' });
+    try {
+        // Verify reCAPTCHA token
+        const recaptchaResponse = await axios.post(
+            'https://www.google.com/recaptcha/api/siteverify',
+            {},
+            {
+                params: {
+                    secret: RECAPTCHA_SECRET_KEY,
+                    response: recaptchaToken,
+                },
+            }
+        );
+
+        const { success, score } = recaptchaResponse.data;
+        if (!success || score < 0.5) {
+            return res.status(403).json({ message: 'Failed reCAPTCHA verification' });
         }
+
         // Check if the username already exists
         const [result] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
         if (result.length > 0) {
@@ -48,7 +56,7 @@ app.post('/auth/signup', async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         // Insert the new user into the database
-        const joinedAt = new Date(); // Current timestamp for joined_at
+        const joinedAt = new Date();
         await db.query(
             'INSERT INTO users (username, email, age, password, experience, level, stats, joined_at, head, torso, legs, feet) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [username, email, age, hashedPassword, 0, 1, defaultStats, joinedAt, '', '', '', '']
