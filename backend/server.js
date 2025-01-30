@@ -20,7 +20,7 @@ const verifyRecaptcha = async (recaptchaToken) => {
     });
   
     try {
-      const response = await fetch(`https://www.google.com/recaptcha/api/siteverify?${params}`, {
+      const response = await fetch(`https://www.google.com/recaptcha/api/siteverify?secret=${params}`, {
         method: 'POST',
       });
   
