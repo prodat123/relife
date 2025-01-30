@@ -12,13 +12,33 @@ app.use(bodyParser.json());
 
 const allowedOrigins = ['https://relifehabits.com'];
 
-app.use(cors({
-    origin: allowedOrigins,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+app.use(cors());
 
-const RECAPTCHA_SECRET_KEY = '6LccnbkqAAAAACoKQh3TQPweZIl0xNTL8pthX3Un';
+const verifyRecaptcha = async (recaptchaToken) => {
+    const RECAPTCHA_SECRET_KEY = '6LccnbkqAAAAACoKQh3TQPweZIl0xNTL8pthX3Un'; // Replace with your actual secret key
+  
+    const params = new URLSearchParams({
+      secret: RECAPTCHA_SECRET_KEY,
+      response: recaptchaToken,
+    });
+  
+    try {
+      const response = await fetch(`https://www.google.com/recaptcha/api/siteverify?${params}`, {
+        method: 'POST',
+      });
+  
+      if (!response.ok) {
+        throw new Error('Failed to verify reCAPTCHA');
+      }
+  
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error verifying reCAPTCHA:', error);
+      throw error;
+    }
+};
+  
 
 app.post('/auth/signup', async (req, res) => {
     const { username, password, email, age, recaptchaToken } = req.body;
@@ -36,20 +56,10 @@ app.post('/auth/signup', async (req, res) => {
 
     try {
         // Verify reCAPTCHA token
-        const recaptchaResponse = await axios.post(
-            'https://www.google.com/recaptcha/api/siteverify',
-            {},
-            {
-                params: {
-                    secret: RECAPTCHA_SECRET_KEY,
-                    response: recaptchaToken,
-                },
-            }
-        );
+        const recaptchaResponse = await verifyRecaptcha(recaptchaToken);
 
-        const { success, score } = recaptchaResponse.data;
-        if (!success || score < 0.5) {
-            return res.status(403).json({ message: 'Failed reCAPTCHA verification' });
+        if (!recaptchaResponse.success) {
+            return res.status(400).json({ message: 'Invalid reCAPTCHA response' });
         }
 
         // Check if the username already exists
