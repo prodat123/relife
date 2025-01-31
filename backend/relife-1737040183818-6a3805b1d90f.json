@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "relife-1737040183818",
+  "private_key_id": "6a3805b1d90fcdc98544dcaf4775c1b2eda15a15",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDKS04YPllEWfh0\npq2tLD6QtB7u6u5dcYYTGsHAoN+Ks9E3tYmMWEKvq7OJ5vGkiPgqhowG7PMOys/f\nJ9yn+N0X01XT/bHEhEbq849oLqX+XpQvvTroaXT2jf2srdnUBbMjIc+avRg5QRtb\nluiJ3Jok12XM8mM9r3eCJx/OuB4B8pEnKs35bEBD9zbvL34HBB+jbKs8KIoCQWER\n5xnoD1yTPb/cVfDgldWtb06vjr1uLpQ6SAbhUgS0kNOvdMvz8th6nFf9Jce96TVy\nzx4b4X21zHgiwK6qa0IuLrQByRdR1U9vToE/wuy4w2nPzez4s0hEHL8lX2tM9d5p\nggc8+b95AgMBAAECggEAOr0Z/H0iI3AybgC13lpCAndiogISW4yqnyJ+TuYHcrla\nzx/FxDwehO7Iz4qA8MMauBJgV2R3AP0P1d63ughPfmsNeWQpOYQlKXS2V8xvw4gH\n5ELAd5qjbTH2jize2qsbBGD9bJNqlLlcbcBIXjtxgLAQra1V9qPcAi1FFZutjuew\n7ZiSucyjrxHzJVlA/rJyLWqctvCKD5z4Nm8MhjIX0Cf3yZsvVnwkL9/RS28mbFq1\nVuv6SkI4WiGB4nB3f/dJFaM4VcNCgYsScmCBBS7MNzsJloAbMAFIuxgB7RtRBfG+\nAHwkdWNHxQknILuRjRqCfhCYDdRMwGlIJNZOGjKyZwKBgQD32l6dtB6V0S4jLLdJ\npf5Jm0oaQ+wfVcFtNFtBnzeDNAaVEUTuVxPQTFT9jY9y24Pk4hz2+X+BQrXOtUOh\nyuLHlyZlXNu446xL9gBWV0YR//YcbD8rla7zvtD7HOX4PX4+Jw02xaLxB1vSXhXE\nUqNb5Pwl5WpVMaWlrw2socv8KwKBgQDQ8ZFEiEeqhQFmsS8eHzuRdvf+PvzRjwtk\np6vISS9D6HNPA44btH1nhiNm6o1htHcSF8kcBfoEH2zoeLe0+VeDWkkCUa01T1mn\ncsytJi0Mc17Rsz2xpzCYjgrAeSP2TqeHh36kppcGXRA6Fw7upr9abYwt1kYvec/l\nBf/XDtXM6wKBgQDHg1XUltBkAw2jrPQh6egHMmT1PaXOF4brtFCdQ2A5UmDWEB+v\nyBKgA0ILFK/bYk8KqOVt/asgzyVwrsMxcxMYXVjAEX6hl0vznaPp3Lj/9k4T1SMI\nn6ZEeV7aNQn9yOpdd6wQYglnAmhsr+XPskHj0DEVBFaTG7Le60oTo+6DHwKBgE43\nL68c6N7/XS/pAf9fp7fjdiA5ygBUcOpkDd0y8DuWh5u7c/YREaSwRQ5gnT5HBQ/D\n0afo4NesP+OiVPqtIEJuiMgSdSlwo9oYEmB62wA/K+6KD30yXfGtsn6smna4qOQG\nJ7VRG1XpfoqQWSmjSBx8x63c+XcKPXW5UjVaO1SzAoGAMU3Xy/KwgRS6XfIU/HuJ\nk7BszFJHYT+EmE40rc+v6K2I3LVFS1KXFSs9SoEUj6wTHLExZu8f6vKyxL4Wl1Cx\nqQoA3Ppqtxbpwjm7fngUPwJ8R9rjwL/+OfL8VfjE12RWPZ3TwWqiXLnPV+2dDqep\nDc0/whedY/zfA/2MeeCK5Tw=\n-----END PRIVATE KEY-----\n",
+  "client_email": "relife@relife-1737040183818.iam.gserviceaccount.com",
+  "client_id": "107687232401799294412",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/relife%40relife-1737040183818.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

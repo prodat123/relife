@@ -7,35 +7,13 @@ const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
 const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
 
+
+
 app.use(bodyParser.json());
 
 app.use(cors());
 
-const verifyRecaptcha = async (recaptchaToken) => {
-    const RECAPTCHA_SECRET_KEY = '6LccnbkqAAAAACoKQh3TQPweZIl0xNTL8pthX3Un'; // Replace with your actual secret key
-  
-    const params = new URLSearchParams({
-      secret: RECAPTCHA_SECRET_KEY,
-      response: recaptchaToken,
-    });
-  
-    try {
-      const response = await fetch(`https://www.google.com/recaptcha/api/siteverify?secret=${params}`, {
-        method: 'POST',
-      });
-  
-      if (!response.ok) {
-        throw new Error('Failed to verify reCAPTCHA');
-      }
-  
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Error verifying reCAPTCHA:', error);
-      throw error;
-    }
-};
-  
+
 
 app.post('/auth/signup', async (req, res) => {
     const { username, password, email, age, recaptchaToken } = req.body;
@@ -47,29 +25,19 @@ app.post('/auth/signup', async (req, res) => {
         stamina: 1,
     });
 
-    if (!recaptchaToken) {
+    if (recaptchaToken.length < 40) {
         return res.status(400).json({ message: 'reCAPTCHA token is missing' });
     }
 
     try {
-        // Verify reCAPTCHA token
-        const recaptchaResponse = await verifyRecaptcha(recaptchaToken);
-
-        if (!recaptchaResponse.success) {
-            return res.status(400).json({ message: 'Invalid reCAPTCHA response' });
-        }
-
-        // Check if the username already exists
         const [result] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
         if (result.length > 0) {
             return res.status(400).json({ message: 'Username already exists' });
         }
 
-        // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10);
+        const joinedAt = new Date().toISOString().slice(0, 10);
 
-        // Insert the new user into the database
-        const joinedAt = new Date();
         await db.query(
             'INSERT INTO users (username, email, age, password, experience, level, stats, joined_at, head, torso, legs, feet) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [username, email, age, hashedPassword, 0, 1, defaultStats, joinedAt, '', '', '', '']
@@ -81,6 +49,7 @@ app.post('/auth/signup', async (req, res) => {
         res.status(500).json({ message: 'Error signing up' });
     }
 });
+
 
 app.post('/auth/login', async (req, res) => {
     const { username, password } = req.body;
@@ -1252,19 +1221,57 @@ app.post('/add-to-tower-leaderboard', (req, res) => {
 
 app.post('/vows', async (req, res) => {
     try {
-        const { name, description, experience_reward, stat_reward, difficulty, created_by, status, created_at, completed_at, deadline } = req.body;
-        
+        const { name, description, selectedStats, difficulty, created_by, deadline } = req.body;
+
+        // Reward configurations
+        const xpRewards = [10, 20, 30, 40, 50];
+        const statRewardValues = [1, 2, 3, 4, 5];
+
+        // Validate difficulty index range
+        if (difficulty < 1 || difficulty > xpRewards.length) {
+            return res.status(400).json({ error: 'Invalid difficulty level' });
+        }
+
+        // Calculate experience reward
+        const experience_reward = xpRewards[difficulty - 1];
+
+        // Calculate stat reward
+        const stat_reward = selectedStats.reduce((acc, stat) => {
+            acc[stat] = statRewardValues[difficulty - 1];
+            return acc;
+        }, {});
+
+        // Define SQL insertion query
         const sql = `INSERT INTO vows (name, description, experience_reward, stat_reward, difficulty, created_by, status, created_at, completed_at, deadline) 
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-        await db.query(sql, [name, description, experience_reward, JSON.stringify(stat_reward), difficulty, created_by, status, created_at, completed_at, deadline]);
+        // Current date formatted as yyyy-mm-dd
+        const created_at = new Date().toISOString().split('T')[0];
+        const status = 'active';
+        const completed_at = ''; // Empty by default
+
+        // Insert vow into database
+        await db.query(sql, [
+            name,
+            description,
+            experience_reward,
+            JSON.stringify(stat_reward),
+            difficulty,
+            created_by,
+            status,
+            created_at,
+            completed_at,
+            deadline
+        ]);
 
         res.status(201).json({ message: 'Vow added successfully' });
+
     } catch (error) {
         console.error('Error adding vow:', error);
         res.status(500).json({ error: 'Failed to add vow' });
     }
 });
+
 
 // GET: Fetch vows for a specific user
 app.get('/vows', async (req, res) => {

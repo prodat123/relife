@@ -12,6 +12,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@google-cloud/recaptcha-enterprise": "^5.13.0",
     "axios": "^1.7.9",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
@@ -19,8 +20,11 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
+    "google-auth-library": "^9.15.1",
+    "isomorphic-fetch": "^3.0.0",
     "mysql2": "^3.11.4",
     "node-cron": "^3.0.3",
+    "node-fetch": "^2.7.0",
     "uuid": "^11.0.3"
   },
   "devDependencies": {
