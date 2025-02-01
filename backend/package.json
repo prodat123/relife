@@ -25,6 +25,7 @@
     "mysql2": "^3.11.4",
     "node-cron": "^3.0.3",
     "node-fetch": "^2.7.0",
+    "request": "^2.88.2",
     "uuid": "^11.0.3"
   },
   "devDependencies": {

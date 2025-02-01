@@ -7,13 +7,9 @@ const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
 const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
 
-
-
 app.use(bodyParser.json());
 
 app.use(cors());
-
-
 
 app.post('/auth/signup', async (req, res) => {
     const { username, password, email, age, recaptchaToken } = req.body;
@@ -265,8 +261,6 @@ const insertDailyQuests = async () => {
     }
 };
 
-
-
 const clearCompletedQuestParticipants = async () => {
     const query = `DELETE FROM quest_participants WHERE completed = 0;`;
 
@@ -461,8 +455,6 @@ app.get('/quests/completed', async (req, res) => {
     }
 });
 
-
-
 app.post('/quests/finish', async (req, res) => {
     const { questId, userId, completedDate } = req.body;
 
@@ -591,7 +583,6 @@ app.post('/quests/finish', async (req, res) => {
         res.status(500).json({ error: 'Failed to mark quest as finished.' });
     }
 });
-
 
 app.get('/quests/daily', async (req, res) => {
     
@@ -1449,16 +1440,15 @@ app.get('/completed-quests-stats', async (req, res) => {
     }
 
     try {
-        const currentDateStr = date; // Use the provided date directly
+        const currentDateStr = date;
 
-        // Calculate one week ago by adjusting the date (convert to Date object for calculation)
-        const oneWeekAgoDate = new Date(date); // Use the date provided directly
-        oneWeekAgoDate.setDate(oneWeekAgoDate.getDate() - 6); // Subtract 7 days for one week ago
+        // Parse input date and calculate one week ago, including today
+        const currentDate = new Date(currentDateStr);
+        const oneWeekAgoDate = new Date(currentDate);
+        oneWeekAgoDate.setDate(currentDate.getDate() - 6);
 
-        // Directly format the date using toISOString()
-        const oneWeekAgoStr = oneWeekAgoDate.toISOString().split('T')[0]; // Format the new date to 'YYYY-MM-DD'
+        const oneWeekAgoStr = oneWeekAgoDate.toISOString().split('T')[0];
 
-        // Query to get completed quests within the last week
         const [questParticipants] = await db.query(
             `SELECT qp.quest_id, qp.completed_at
              FROM quest_participants qp
@@ -1467,7 +1457,6 @@ app.get('/completed-quests-stats', async (req, res) => {
             [userId, oneWeekAgoStr, currentDateStr]
         );
 
-        // Query to get completed vows with "completed" status within the last week
         const [vows] = await db.query(
             `SELECT v.id, v.completed_at, v.stat_reward
              FROM vows v
@@ -1477,36 +1466,30 @@ app.get('/completed-quests-stats', async (req, res) => {
             [userId, oneWeekAgoStr, currentDateStr]
         );
 
-        // If no quests or vows found, return empty
         if (questParticipants.length === 0 && vows.length === 0) {
             const result = Array.from({ length: 7 }, (_, i) => {
                 const day = new Date(oneWeekAgoDate);
                 day.setDate(oneWeekAgoDate.getDate() + i);
-                const dateStr = day.toISOString().split('T')[0]; // Format date
+                const dateStr = day.toISOString().split('T')[0];
                 return { date: dateStr, stats: { physical_strength: 0, bravery: 0, intelligence: 0, stamina: 0 } };
             });
             return res.json(result);
         }
 
-        // Get all the quest stat_rewards
         const questIds = questParticipants.map(qp => qp.quest_id);
         const [quests] = questIds.length
             ? await db.query('SELECT id, stat_reward FROM quests WHERE id IN (?)', [questIds])
             : [[]];
 
-        // Prepare a map of quest_id -> stat_reward
         const questRewards = quests.reduce((acc, quest) => {
             acc[quest.id] = JSON.parse(quest.stat_reward);
             return acc;
         }, {});
 
-        // Aggregate stats per day
         const statsPerDay = {};
 
-        // Process quest stats
         questParticipants.forEach(participant => {
             const completedDateStr = participant.completed_at.slice(0, 10);
-
             const statReward = questRewards[participant.quest_id];
             if (!statReward) return;
 
@@ -1520,7 +1503,6 @@ app.get('/completed-quests-stats', async (req, res) => {
             statsPerDay[completedDateStr].stamina += statReward.stamina || 0;
         });
 
-        // Process vow stats with "completed" status
         vows.forEach(vow => {
             const completedDateStr = vow.completed_at.slice(0, 10);
             const statReward = JSON.parse(vow.stat_reward);
@@ -1535,16 +1517,16 @@ app.get('/completed-quests-stats', async (req, res) => {
             statsPerDay[completedDateStr].stamina += statReward.stamina || 0;
         });
 
-        // Generate past 7 days with stats, including days with no data (set to 0)
         const result = Array.from({ length: 7 }, (_, i) => {
-            const day = new Date();
-            day.setDate(oneWeekAgoDate.getDate() + i);
-            const dateStr = day.toISOString().split('T')[0]; // Format date
-
+            const day = new Date(oneWeekAgoDate); 
+            day.setDate(oneWeekAgoDate.getDate() + i); 
+            const dateStr = day.toISOString().split('T')[0]; 
+        
             const stats = statsPerDay[dateStr] || { physical_strength: 0, bravery: 0, intelligence: 0, stamina: 0 };
-
+        
             return { date: dateStr, stats };
         });
+        
 
         console.log(result);
 
@@ -1554,6 +1536,7 @@ app.get('/completed-quests-stats', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch stats' });
     }
 });
+
 
 
 app.get('/total-completed-quests-stats', async (req, res) => {
