@@ -999,6 +999,7 @@ app.get('/shop/items', async (req, res) => {
                 shop_items si
             JOIN 
                 items i ON si.item_id = i.id
+            ORDER BY si.price ASC
             LIMIT ? OFFSET ?
         `, [limit, offset]);
 
@@ -1008,6 +1009,7 @@ app.get('/shop/items', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch shop items.' });
     }
 });
+
 
 
 app.post('/shop/buy', async (req, res) => {
