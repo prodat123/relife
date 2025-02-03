@@ -1261,19 +1261,23 @@ app.post('/vows', async (req, res) => {
         const status = 'active';
         const completed_at = ''; // Empty by default
 
-        // Insert vow into database
-        await db.query(sql, [
-            name,
-            description,
-            experience_reward,
-            JSON.stringify(stat_reward),
-            difficulty,
-            created_by,
-            status,
-            created_at,
-            completed_at,
-            deadline
-        ]);
+
+        if(userCheckResult.count > 0 && vowCountResult.vowCount < 3){
+            // Insert vow into database
+            await db.query(sql, [
+                name,
+                description,
+                experience_reward,
+                JSON.stringify(stat_reward),
+                difficulty,
+                created_by,
+                status,
+                created_at,
+                completed_at,
+                deadline
+            ]);
+        }
+        
 
         res.status(201).json({ message: 'Vow added successfully' });
 
