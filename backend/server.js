@@ -1226,8 +1226,12 @@ app.post('/vows', async (req, res) => {
             return res.status(404).json({ error: 'User does not exist' });
         }
 
-        // Check vow count for the user
-        const vowCountQuery = 'SELECT COUNT(*) AS vowCount FROM vows WHERE created_by = ?';
+        // Check active vow count for the user (excluding completed vows)
+        const vowCountQuery = `
+            SELECT COUNT(*) AS vowCount 
+            FROM vows 
+            WHERE created_by = ? AND status != 'completed'
+        `;
         const [vowCountResult] = await db.query(vowCountQuery, [created_by]);
 
         if (vowCountResult.vowCount >= 3) {
@@ -1272,11 +1276,13 @@ app.post('/vows', async (req, res) => {
         ]);
 
         res.status(201).json({ message: 'Vow added successfully' });
+
     } catch (error) {
         console.error('Error adding vow:', error);
         res.status(500).json({ error: 'Failed to add vow' });
     }
 });
+
 
 
 
