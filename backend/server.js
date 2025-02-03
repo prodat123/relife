@@ -1218,6 +1218,22 @@ app.post('/vows', async (req, res) => {
         const xpRewards = [10, 20, 30, 40, 50];
         const statRewardValues = [1, 2, 3, 4, 5];
 
+        // Check if user is valid and exists
+        const userCheckQuery = 'SELECT COUNT(*) AS count FROM users WHERE id = ?';
+        const [userCheckResult] = await db.query(userCheckQuery, [created_by]);
+
+        if (userCheckResult.count === 0) {
+            return res.status(404).json({ error: 'User does not exist' });
+        }
+
+        // Check vow count for the user
+        const vowCountQuery = 'SELECT COUNT(*) AS vowCount FROM vows WHERE created_by = ?';
+        const [vowCountResult] = await db.query(vowCountQuery, [created_by]);
+
+        if (vowCountResult.vowCount >= 3) {
+            return res.status(403).json({ error: 'Vow limit exceeded. You can only have up to 3 active vows.' });
+        }
+
         // Validate difficulty index range
         if (difficulty < 1 || difficulty > xpRewards.length) {
             return res.status(400).json({ error: 'Invalid difficulty level' });
@@ -1256,12 +1272,12 @@ app.post('/vows', async (req, res) => {
         ]);
 
         res.status(201).json({ message: 'Vow added successfully' });
-
     } catch (error) {
         console.error('Error adding vow:', error);
         res.status(500).json({ error: 'Failed to add vow' });
     }
 });
+
 
 
 // GET: Fetch vows for a specific user
