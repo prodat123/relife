@@ -1222,7 +1222,7 @@ app.post('/vows', async (req, res) => {
         const userCheckQuery = 'SELECT COUNT(*) AS count FROM users WHERE id = ?';
         const [userCheckResult] = await db.query(userCheckQuery, [created_by]);
 
-        if (userCheckResult.count === 0) {
+        if (userCheckResult[0].count === 0) {
             return res.status(404).json({ error: 'User does not exist' });
         }
 
@@ -1234,7 +1234,9 @@ app.post('/vows', async (req, res) => {
         `;
         const [vowCountResult] = await db.query(vowCountQuery, [created_by]);
 
-        if (vowCountResult.vowCount >= 3) {
+        console.log(vowCountResult[0].vowCount);
+
+        if (vowCountResult[0].vowCount >= 3) {
             return res.status(403).json({ error: 'Vow limit exceeded. You can only have up to 3 active vows.' });
         }
 
@@ -1262,7 +1264,7 @@ app.post('/vows', async (req, res) => {
         const completed_at = ''; // Empty by default
 
 
-        if(userCheckResult.count > 0 && vowCountResult.vowCount < 3){
+        if(userCheckResult[0].count > 0 && vowCountResult[0].vowCount < 3){
             // Insert vow into database
             await db.query(sql, [
                 name,
