@@ -1,12 +1,13 @@
 const mysql = require('mysql2/promise');
+require('dotenv').config();
 
 // Create a connection pool
 const pool = mysql.createPool({
-    host: '46.202.197.83', // Your database host 
-    port: 3306,     
-    user: 'u513798782_relife',            
-    password: '>9jS+B|z',    // Your MySQL password
-    database: 'u513798782_relife',      // Your database name
+    host: process.env.DB_IP, // Your database host 
+    port: process.env.DB_PORT,     
+    user: process.env.DB_USERNAME,            
+    password: process.env.DB_PASSWORD,    // Your MySQL password
+    database: process.env.DB_DATABASE,      // Your database name
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0

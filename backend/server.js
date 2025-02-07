@@ -7,6 +7,8 @@ const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
 const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
 
+require('dotenv').config();
+
 app.use(bodyParser.json());
 
 app.use(cors());
@@ -683,7 +685,7 @@ app.get('/account', async (req, res) => {
 app.get('/leaderboard', async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 50;
+        const limit = parseInt(req.query.limit) || 5000;
         const offset = (page - 1) * limit;
 
         const [ users ] = await db.query(`
@@ -1214,82 +1216,87 @@ app.post('/add-to-tower-leaderboard', (req, res) => {
 
 app.post('/vows', async (req, res) => {
     try {
-        const { name, description, selectedStats, difficulty, created_by, deadline } = req.body;
-
-        // Reward configurations
-        const xpRewards = [10, 20, 30, 40, 50];
-        const statRewardValues = [1, 2, 3, 4, 5];
-
-        // Check if user is valid and exists
-        const userCheckQuery = 'SELECT COUNT(*) AS count FROM users WHERE id = ?';
-        const [userCheckResult] = await db.query(userCheckQuery, [created_by]);
-
-        if (userCheckResult[0].count === 0) {
-            return res.status(404).json({ error: 'User does not exist' });
-        }
-
-        // Check active vow count for the user (excluding completed vows)
-        const vowCountQuery = `
-            SELECT COUNT(*) AS vowCount 
-            FROM vows 
-            WHERE created_by = ? AND status != 'completed'
-        `;
-        const [vowCountResult] = await db.query(vowCountQuery, [created_by]);
-
-        console.log(vowCountResult[0].vowCount);
-
-        if (vowCountResult[0].vowCount >= 3) {
-            return res.status(403).json({ error: 'Vow limit exceeded. You can only have up to 3 active vows.' });
-        }
-
-        // Validate difficulty index range
-        if (difficulty < 1 || difficulty > xpRewards.length) {
-            return res.status(400).json({ error: 'Invalid difficulty level' });
-        }
-
-        // Calculate experience reward
-        const experience_reward = xpRewards[difficulty - 1];
-
-        // Calculate stat reward
-        const stat_reward = selectedStats.reduce((acc, stat) => {
-            acc[stat] = statRewardValues[difficulty - 1];
-            return acc;
-        }, {});
-
-        // Define SQL insertion query
-        const sql = `INSERT INTO vows (name, description, experience_reward, stat_reward, difficulty, created_by, status, created_at, completed_at, deadline) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-
-        // Current date formatted as yyyy-mm-dd
-        const created_at = new Date().toISOString().split('T')[0];
-        const status = 'active';
-        const completed_at = ''; // Empty by default
-
-
-        if(userCheckResult[0].count > 0 && vowCountResult[0].vowCount < 3){
-            // Insert vow into database
-            await db.query(sql, [
-                name,
-                description,
-                experience_reward,
-                JSON.stringify(stat_reward),
-                difficulty,
-                created_by,
-                status,
-                created_at,
-                completed_at,
-                deadline
-            ]);
-        }
-        
-
-        res.status(201).json({ message: 'Vow added successfully' });
-
+      const { name, description, selectedStats, difficulty, created_by, deadline } = req.body;
+  
+      // Reward configurations
+      const xpRewards = [10, 20, 30, 40, 50];
+      const statRewardValues = [1, 2, 3, 4, 5];
+  
+      // Check if user is valid and exists
+      const userCheckQuery = 'SELECT COUNT(*) AS count FROM users WHERE id = ?';
+      const [userCheckResult] = await db.query(userCheckQuery, [created_by]);
+  
+      if (userCheckResult[0].count === 0) {
+        return res.status(404).json({ error: 'User does not exist' });
+      }
+  
+      // Check active vow count for the user (excluding completed vows)
+      const vowCountQuery = `
+        SELECT COUNT(*) AS vowCount 
+        FROM vows 
+        WHERE created_by = ? AND status != 'completed'
+      `;
+      const [vowCountResult] = await db.query(vowCountQuery, [created_by]);
+  
+    //   if (vowCountResult[0].vowCount >= 3) {
+    //     return res.status(403).json({ error: 'Vow limit exceeded. You can only have up to 3 active vows.' });
+    //   }
+  
+      // Check if there are already 3 vows with the same created_at date
+      const created_at = new Date().toISOString().split('T')[0]; // Current date in yyyy-mm-dd format
+      const vowDateCountQuery = `
+        SELECT COUNT(*) AS dateVowCount 
+        FROM vows 
+        WHERE created_by = ? AND created_at = ?
+      `;
+      const [dateVowCountResult] = await db.query(vowDateCountQuery, [created_by, created_at]);
+  
+      if (dateVowCountResult[0].dateVowCount >= 3) {
+        return res.status(403).json({ error: 'You can only create up to 3 vows per day.' });
+      }
+  
+      // Validate difficulty index range
+      if (difficulty < 1 || difficulty > xpRewards.length) {
+        return res.status(400).json({ error: 'Invalid difficulty level' });
+      }
+  
+      // Calculate experience reward
+      const experience_reward = xpRewards[difficulty - 1];
+  
+      // Calculate stat reward
+      const stat_reward = selectedStats.reduce((acc, stat) => {
+        acc[stat] = statRewardValues[difficulty - 1];
+        return acc;
+      }, {});
+  
+      // Define SQL insertion query
+      const sql = `INSERT INTO vows (name, description, experience_reward, stat_reward, difficulty, created_by, status, created_at, completed_at, deadline) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+      const status = 'active';
+      const completed_at = ''; // Empty by default
+  
+      // Insert vow into database
+      await db.query(sql, [
+        name,
+        description,
+        experience_reward,
+        JSON.stringify(stat_reward),
+        difficulty,
+        created_by,
+        status,
+        created_at,
+        completed_at,
+        deadline
+      ]);
+  
+      res.status(201).json({ message: 'Vow added successfully' });
+  
     } catch (error) {
-        console.error('Error adding vow:', error);
-        res.status(500).json({ error: 'Failed to add vow' });
+      console.error('Error adding vow:', error);
+      res.status(500).json({ error: 'Failed to add vow' });
     }
 });
+  
 
 
 
