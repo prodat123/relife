@@ -687,7 +687,7 @@ app.get('/monster', async (req, res) => {
     const { monsterName } = req.query;
 
     if (!monsterName) {
-        return res.status(400).json({ error: 'User ID is required' });
+        return res.status(400).json({ error: 'Monster name is required' });
     }
 
     try {
@@ -697,8 +697,8 @@ app.get('/monster', async (req, res) => {
             [monsterName]
         );
 
-        if (userResults.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
+        if (monsterResults.length === 0) {
+            return res.status(404).json({ error: 'Monster not found' });
         }
 
         const monsterResult = monsterResults[0];
@@ -709,8 +709,8 @@ app.get('/monster', async (req, res) => {
         // Send the response with user data, inventory, and equipment
         res.status(200).json(monsterResult);
     } catch (error) {
-        console.error('Error fetching account data:', error.message);
-        res.status(500).json({ error: 'Failed to fetch account data' });
+        console.error('Error fetching monster data:', error.message);
+        res.status(500).json({ error: 'Failed to fetch monster data' });
     }
 });
 
