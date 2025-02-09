@@ -1297,10 +1297,6 @@ app.post('/vows', async (req, res) => {
     }
 });
   
-
-
-
-
 // GET: Fetch vows for a specific user
 app.get('/vows', async (req, res) => {
     const { userId } = req.query;
@@ -1692,6 +1688,17 @@ app.get('/total-completed-quests-stats', async (req, res) => {
     }
 });
 
+app.get('/spells', async (req, res) => {
+    try {
+        const [ spells ] = await db.query(`
+            SELECT * FROM spells 
+        `);
+        res.json(spells);
+    } catch (error) {
+        console.error('Error fetching leaderboard:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+});
 
 
 
