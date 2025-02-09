@@ -683,6 +683,37 @@ app.get('/account', async (req, res) => {
     }
 });
 
+app.get('/monster', async (req, res) => {
+    const { monsterName } = req.query;
+
+    if (!monsterName) {
+        return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    try {
+        // Fetch the user's account data
+        const [monsterResults] = await db.query(
+            'SELECT * FROM monsters WHERE name = ?',
+            [monsterName]
+        );
+
+        if (userResults.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const monsterResult = monsterResults[0];
+
+        // Log the equipment data for debugging
+        // console.log("Mapped Equipment Data:", equipment);
+
+        // Send the response with user data, inventory, and equipment
+        res.status(200).json(monsterResult);
+    } catch (error) {
+        console.error('Error fetching account data:', error.message);
+        res.status(500).json({ error: 'Failed to fetch account data' });
+    }
+});
+
 app.get('/leaderboard', async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
