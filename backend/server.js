@@ -1728,6 +1728,37 @@ app.post('/updateSpells', async (req, res) => {
     }
 });
 
+app.post('/getSpellData', async (req, res) => {
+    const { spellName } = req.body; // Destructure spell name from request body
+
+    // Check if spell name is provided
+    if (!spellName) {
+        return res.status(400).json({ message: 'Spell name is required' });
+    }
+
+    try {
+        // Query to get the spell data from the database based on spell name
+        const query = `
+            SELECT * 
+            FROM spells 
+            WHERE name = ?;
+        `;
+        const [spellData] = await db.query(query, [spellName]);
+
+        // Check if spell exists
+        if (spellData.length === 0) {
+            return res.status(404).json({ message: 'Spell not found' });
+        }
+
+        // Respond with the spell data
+        res.json(spellData[0]);
+    } catch (error) {
+        console.error('Error fetching spell data:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+});
+
+
 
 
 
