@@ -1700,6 +1700,34 @@ app.get('/spells', async (req, res) => {
     }
 });
 
+app.post('/updateSpells', async (req, res) => {
+    const { userId, spellSlots } = req.body; // Destructure from request body
+
+    // Prepare spell list while maintaining order
+    const orderedSpells = [
+        spellSlots.first?.name || null,
+        spellSlots.second?.name || null,
+        spellSlots.third?.name || null
+    ];
+
+    // Convert the spell list to a string (comma-separated or JSON)
+    const spellsString = JSON.stringify(orderedSpells);
+
+    try {
+        const query = `
+            UPDATE users 
+            SET spells = ? 
+            WHERE id = ?;
+        `;
+        await db.query(query, [spellsString, userId]);
+        res.json({ message: 'Spells updated successfully' });
+    } catch (error) {
+        console.error('Error updating spells:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+});
+
+
 
 
 
