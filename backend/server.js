@@ -1706,9 +1706,9 @@ app.post('/updateSpells', async (req, res) => {
 
     // Prepare spell list while maintaining order
     const orderedSpells = [
-        spellSlots.first?.name || null,
-        spellSlots.second?.name || null,
-        spellSlots.third?.name || null
+        spellSlots.first || null,
+        spellSlots.second || null,
+        spellSlots.third || null
     ];
 
     // Convert the spell list to a string (comma-separated or JSON)
