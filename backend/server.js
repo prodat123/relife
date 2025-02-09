@@ -633,7 +633,7 @@ app.get('/account', async (req, res) => {
     try {
         // Fetch the user's account data
         const [userResults] = await db.query(
-            'SELECT username, experience, level, stats, head, torso, legs, feet, weapon, inventory, currency, discount, last_spin FROM users WHERE id = ?',
+            'SELECT username, experience, level, stats, head, torso, legs, feet, weapon, inventory, currency, discount, last_spin, spells FROM users WHERE id = ?',
             [userId]
         );
 
@@ -674,7 +674,8 @@ app.get('/account', async (req, res) => {
             inventory: inventoryItems, // Send inventory directly from the user's data
             currency: user.currency,
             discount: user.discount,
-            last_spin: user.last_spin
+            last_spin: user.last_spin,
+            spells: user.spells,
         });
     } catch (error) {
         console.error('Error fetching account data:', error.message);
