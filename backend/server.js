@@ -758,14 +758,14 @@ app.post('/update-equipment', async (req, res) => {
 
     try {
         // Fetch user data
-        // const [userResult] = await db.query(
-        //     `SELECT stats, ?? AS equippedItem FROM users WHERE id = ?`,
-        //     [slot, userId]
-        // );
+        const [userResult] = await db.query(
+            `SELECT stats, ?? AS equippedItem FROM users WHERE id = ?`,
+            [slot, userId]
+        );
 
-        // if (userResult.length === 0) {
-        //     return res.status(404).json({ error: 'User not found' });
-        // }
+        if (userResult.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
 
         // let userStats = JSON.parse(userResult[0].stats || '{}');
         // const equippedItemId = userResult[0].equippedItem;
@@ -795,7 +795,7 @@ app.post('/update-equipment', async (req, res) => {
 
             // Update stats and unequip the item
             await db.query(
-                `UPDATE users ?? = NULL WHERE id = ?`,
+                `UPDATE users SET ?? = NULL WHERE id = ?`,
                 [slot, userId]
             );
 
@@ -813,7 +813,7 @@ app.post('/update-equipment', async (req, res) => {
             return res.status(404).json({ error: 'Item not found in inventory' });
         }
 
-        const newItemStats = JSON.parse(newItem.stats || '{}');
+        // const newItemStats = JSON.parse(newItem.stats || '{}');
         // Object.entries(newItemStats).forEach(([stat, value]) => {
         //     const normalizedStat = stat.toLowerCase().trim();
         //     // Add or update stat, without duplicating
