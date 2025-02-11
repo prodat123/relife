@@ -17,7 +17,7 @@ app.post('/auth/signup', async (req, res) => {
     const { username, password, email, age, recaptchaToken } = req.body;
 
     const defaultStats = JSON.stringify({
-        physical_strength: 1,
+        strength: 1,
         bravery: 1,
         intelligence: 1,
         endurance: 1,
@@ -138,7 +138,7 @@ const insertDailyQuests = async () => {
                 FROM (
                     SELECT id FROM (
                         SELECT id FROM quests
-                        WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.physical_strength') IS NOT NULL
+                        WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL
                         ORDER BY RAND()
                         LIMIT 1
                     ) AS subquery1
@@ -173,7 +173,7 @@ const insertDailyQuests = async () => {
                     UNION ALL
                     SELECT id FROM (
                         SELECT id FROM quests
-                        WHERE difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.physical_strength') IS NOT NULL
+                        WHERE difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL
                         ORDER BY RAND()
                         LIMIT 1
                     ) AS subquery6
@@ -208,7 +208,7 @@ const insertDailyQuests = async () => {
                     UNION ALL
                     SELECT id FROM (
                         SELECT id FROM quests
-                        WHERE difficulty IN (3, 4, 5) AND JSON_EXTRACT(stat_reward, '$.physical_strength') IS NOT NULL
+                        WHERE difficulty IN (3, 4, 5) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL
                         ORDER BY RAND()
                         LIMIT 3
                     ) AS subquery11
@@ -917,7 +917,7 @@ app.post('/level-up-item', async (req, res) => {
 
         // Calculate the upgrade stats (including bravery influence)
         const updatedStats = { ...parsedBaseStats };
-        const statTypes = ['endurance', 'physical_strength', 'bravery', 'intelligence'];
+        const statTypes = ['endurance', 'strength', 'bravery', 'intelligence'];
 
         // Apply bravery stat to each stat type
         statTypes.forEach(stat => {
@@ -1525,7 +1525,7 @@ app.get('/completed-quests-stats', async (req, res) => {
                 const day = new Date(oneWeekAgoDate);
                 day.setDate(oneWeekAgoDate.getDate() + i);
                 const dateStr = day.toISOString().split('T')[0];
-                return { date: dateStr, stats: { physical_strength: 0, bravery: 0, intelligence: 0, endurance: 0 } };
+                return { date: dateStr, stats: { strength: 0, bravery: 0, intelligence: 0, endurance: 0 } };
             });
             return res.json(result);
         }
@@ -1548,10 +1548,10 @@ app.get('/completed-quests-stats', async (req, res) => {
             if (!statReward) return;
 
             if (!statsPerDay[completedDateStr]) {
-                statsPerDay[completedDateStr] = { physical_strength: 0, bravery: 0, intelligence: 0, endurance: 0 };
+                statsPerDay[completedDateStr] = { strength: 0, bravery: 0, intelligence: 0, endurance: 0 };
             }
 
-            statsPerDay[completedDateStr].physical_strength += statReward.physical_strength || 0;
+            statsPerDay[completedDateStr].strength += statReward.strength || 0;
             statsPerDay[completedDateStr].bravery += statReward.bravery || 0;
             statsPerDay[completedDateStr].intelligence += statReward.intelligence || 0;
             statsPerDay[completedDateStr].endurance += statReward.endurance || 0;
@@ -1562,10 +1562,10 @@ app.get('/completed-quests-stats', async (req, res) => {
             const statReward = JSON.parse(vow.stat_reward);
 
             if (!statsPerDay[completedDateStr]) {
-                statsPerDay[completedDateStr] = { physical_strength: 0, bravery: 0, intelligence: 0, endurance: 0 };
+                statsPerDay[completedDateStr] = { strength: 0, bravery: 0, intelligence: 0, endurance: 0 };
             }
 
-            statsPerDay[completedDateStr].physical_strength += statReward.physical_strength || 0;
+            statsPerDay[completedDateStr].strength += statReward.strength || 0;
             statsPerDay[completedDateStr].bravery += statReward.bravery || 0;
             statsPerDay[completedDateStr].intelligence += statReward.intelligence || 0;
             statsPerDay[completedDateStr].endurance += statReward.endurance || 0;
@@ -1576,7 +1576,7 @@ app.get('/completed-quests-stats', async (req, res) => {
             day.setDate(oneWeekAgoDate.getDate() + i); 
             const dateStr = day.toISOString().split('T')[0]; 
         
-            const stats = statsPerDay[dateStr] || { physical_strength: 0, bravery: 0, intelligence: 0, endurance: 0 };
+            const stats = statsPerDay[dateStr] || { strength: 0, bravery: 0, intelligence: 0, endurance: 0 };
         
             return { date: dateStr, stats };
         });
@@ -1631,7 +1631,7 @@ app.get('/total-completed-quests-stats', async (req, res) => {
 
         if (questParticipants.length === 0 && vows.length === 0) {
             // Return stats with zero values for the week if no quests or vows completed
-            return res.json({ stats: { physical_strength: 0, bravery: 0, intelligence: 0, endurance: 0 } });
+            return res.json({ stats: { strength: 0, bravery: 0, intelligence: 0, endurance: 0 } });
         }
 
         // Get all the quest stat_rewards for the fetched quest_ids
@@ -1649,7 +1649,7 @@ app.get('/total-completed-quests-stats', async (req, res) => {
 
         // Aggregate stats for the entire week
         let statsArray = {
-            physical_strength: [],
+            strength: [],
             bravery: [],
             intelligence: [],
             endurance: []
@@ -1660,7 +1660,7 @@ app.get('/total-completed-quests-stats', async (req, res) => {
             const statReward = questRewards[participant.quest_id];
             if (!statReward) return;
 
-            if (statReward.physical_strength) statsArray.physical_strength.push(statReward.physical_strength);
+            if (statReward.strength) statsArray.strength.push(statReward.strength);
             if (statReward.bravery) statsArray.bravery.push(statReward.bravery);
             if (statReward.intelligence) statsArray.intelligence.push(statReward.intelligence);
             if (statReward.endurance) statsArray.endurance.push(statReward.endurance);
@@ -1669,7 +1669,7 @@ app.get('/total-completed-quests-stats', async (req, res) => {
         // Process vow stats
         vows.forEach(vow => {
             const statReward = JSON.parse(vow.stat_reward);
-            if (statReward.physical_strength) statsArray.physical_strength.push(statReward.physical_strength);
+            if (statReward.strength) statsArray.strength.push(statReward.strength);
             if (statReward.bravery) statsArray.bravery.push(statReward.bravery);
             if (statReward.intelligence) statsArray.intelligence.push(statReward.intelligence);
             if (statReward.endurance) statsArray.endurance.push(statReward.endurance);
@@ -1693,7 +1693,7 @@ app.get('/total-completed-quests-stats', async (req, res) => {
 
         // Calculate median for each stat
         const totalStats = {
-            physical_strength: calculateMedian(statsArray.physical_strength),
+            strength: calculateMedian(statsArray.strength),
             bravery: calculateMedian(statsArray.bravery),
             intelligence: calculateMedian(statsArray.intelligence),
             endurance: calculateMedian(statsArray.endurance),
