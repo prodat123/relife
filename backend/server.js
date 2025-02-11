@@ -758,52 +758,52 @@ app.post('/update-equipment', async (req, res) => {
 
     try {
         // Fetch user data
-        const [userResult] = await db.query(
-            `SELECT stats, ?? AS equippedItem FROM users WHERE id = ?`,
-            [slot, userId]
-        );
+        // const [userResult] = await db.query(
+        //     `SELECT stats, ?? AS equippedItem FROM users WHERE id = ?`,
+        //     [slot, userId]
+        // );
 
-        if (userResult.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
+        // if (userResult.length === 0) {
+        //     return res.status(404).json({ error: 'User not found' });
+        // }
 
-        let userStats = JSON.parse(userResult[0].stats || '{}');
-        const equippedItemId = userResult[0].equippedItem;
+        // let userStats = JSON.parse(userResult[0].stats || '{}');
+        // const equippedItemId = userResult[0].equippedItem;
 
-        // ⚙️ Handle Stat Adjustment for Previously Equipped Item
-        if (equippedItemId) {
-            console.log("Removing stats from previously equipped item");
+        // // ⚙️ Handle Stat Adjustment for Previously Equipped Item
+        // if (equippedItemId) {
+        //     console.log("Removing stats from previously equipped item");
 
-            const equippedItem = inventory.find(item => item.id === equippedItemId);
-            if (equippedItem) {
-                const equippedItemStats = JSON.parse(equippedItem.stats || '{}');
-                Object.entries(equippedItemStats).forEach(([stat, value]) => {
-                    const normalizedStat = stat.toLowerCase().trim();
-                    if (userStats[normalizedStat] !== undefined) {
-                        userStats[normalizedStat] -= value;
-                        if (userStats[normalizedStat] <= 0) delete userStats[normalizedStat];
-                    }
-                });
-            } else {
-                console.warn("Previously equipped item not found in inventory");
-            }
-        }
+        //     const equippedItem = inventory.find(item => item.id === equippedItemId);
+        //     if (equippedItem) {
+        //         const equippedItemStats = JSON.parse(equippedItem.stats || '{}');
+        //         Object.entries(equippedItemStats).forEach(([stat, value]) => {
+        //             const normalizedStat = stat.toLowerCase().trim();
+        //             if (userStats[normalizedStat] !== undefined) {
+        //                 userStats[normalizedStat] -= value;
+        //                 if (userStats[normalizedStat] <= 0) delete userStats[normalizedStat];
+        //             }
+        //         });
+        //     } else {
+        //         console.warn("Previously equipped item not found in inventory");
+        //     }
+        // }
 
         // ⚙️ Handle Unequip Logic
-        if (itemId === null) {
-            console.log("Unequipping item");
+        // if (itemId === null) {
+        //     console.log("Unequipping item");
 
-            // Update stats and unequip the item
-            await db.query(
-                `UPDATE users SET stats = ?, ?? = NULL WHERE id = ?`,
-                [JSON.stringify(userStats), slot, userId]
-            );
+        //     // Update stats and unequip the item
+        //     await db.query(
+        //         `UPDATE users SET stats = ?, ?? = NULL WHERE id = ?`,
+        //         [JSON.stringify(userStats), slot, userId]
+        //     );
 
-            return res.status(200).json({ 
-                message: 'Item unequipped successfully', 
-                updatedStats: userStats 
-            });
-        }
+        //     return res.status(200).json({ 
+        //         message: 'Item unequipped successfully', 
+        //         updatedStats: userStats 
+        //     });
+        // }
 
         // ⚙️ Handle Equip Logic
         console.log("Equipping new item");
@@ -814,26 +814,26 @@ app.post('/update-equipment', async (req, res) => {
         }
 
         const newItemStats = JSON.parse(newItem.stats || '{}');
-        Object.entries(newItemStats).forEach(([stat, value]) => {
-            const normalizedStat = stat.toLowerCase().trim();
-            // Add or update stat, without duplicating
-            if (userStats[normalizedStat]) {
-                userStats[normalizedStat] += value;
-            } else {
-                userStats[normalizedStat] = value;
-            }
-        });
+        // Object.entries(newItemStats).forEach(([stat, value]) => {
+        //     const normalizedStat = stat.toLowerCase().trim();
+        //     // Add or update stat, without duplicating
+        //     if (userStats[normalizedStat]) {
+        //         userStats[normalizedStat] += value;
+        //     } else {
+        //         userStats[normalizedStat] = value;
+        //     }
+        // });
 
         // Update stats and equip the new item
         await db.query(
-            `UPDATE users SET stats = ?, ?? = ? WHERE id = ?`,
-            [JSON.stringify(userStats), slot, itemId, userId]
+            `UPDATE users SET ?? = ? WHERE id = ?`,
+            [slot, itemId, userId]
         );
 
-        res.status(200).json({ 
-            message: 'Item equipped successfully', 
-            updatedStats: userStats 
-        });
+        // res.status(200).json({ 
+        //     message: 'Item equipped successfully', 
+        //     updatedStats: userStats 
+        // });
 
     } catch (error) {
         console.error('Error updating equipment and stats:', error.message);
@@ -1105,21 +1105,10 @@ app.post('/shop/buy', async (req, res) => {
         currency -= finalPrice;
 
         // Prepare item with random stat modifiers and a unique UUID
-        let itemWithRandomStats = { ...item, id: uuidv4() };
-
-        if (stats) {
-            let itemStats = JSON.parse(stats);
-
-            for (let stat in itemStats) {
-                const randomModifier = Math.floor(Math.random() * 7) - 3; // ±3 random modifier
-                itemStats[stat] += randomModifier;
-            }
-
-            itemWithRandomStats.stats = JSON.stringify(itemStats);
-        }
+        let itemStats = { ...item, id: uuidv4() };
 
         // Append modified item to inventory
-        inventory.push(itemWithRandomStats);
+        inventory.push(itemStats);
 
         // Update user's inventory and currency
         await db.query(
