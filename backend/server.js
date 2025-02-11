@@ -830,10 +830,10 @@ app.post('/update-equipment', async (req, res) => {
             [slot, itemId, userId]
         );
 
-        // res.status(200).json({ 
-        //     message: 'Item equipped successfully', 
-        //     updatedStats: userStats 
-        // });
+        res.status(200).json({ 
+            message: 'Item equipped successfully', 
+            // updatedStats: userStats 
+        });
 
     } catch (error) {
         console.error('Error updating equipment and stats:', error.message);
