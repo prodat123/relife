@@ -790,20 +790,20 @@ app.post('/update-equipment', async (req, res) => {
         // }
 
         // ⚙️ Handle Unequip Logic
-        // if (itemId === null) {
-        //     console.log("Unequipping item");
+        if (itemId === null) {
+            console.log("Unequipping item");
 
-        //     // Update stats and unequip the item
-        //     await db.query(
-        //         `UPDATE users SET stats = ?, ?? = NULL WHERE id = ?`,
-        //         [JSON.stringify(userStats), slot, userId]
-        //     );
+            // Update stats and unequip the item
+            await db.query(
+                `UPDATE users ?? = NULL WHERE id = ?`,
+                [slot, userId]
+            );
 
-        //     return res.status(200).json({ 
-        //         message: 'Item unequipped successfully', 
-        //         updatedStats: userStats 
-        //     });
-        // }
+            return res.status(200).json({ 
+                message: 'Item unequipped successfully', 
+                // updatedStats: userStats 
+            });
+        }
 
         // ⚙️ Handle Equip Logic
         console.log("Equipping new item");
