@@ -140,21 +140,21 @@ const insertDailyQuests = async () => {
                         SELECT id FROM quests
                         WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL
                         ORDER BY RAND()
-                        LIMIT 1
+                        LIMIT 2
                     ) AS subquery1
                     UNION ALL
                     SELECT id FROM (
                         SELECT id FROM quests
                         WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL
                         ORDER BY RAND()
-                        LIMIT 1
+                        LIMIT 2
                     ) AS subquery2
                     UNION ALL
                     SELECT id FROM (
                         SELECT id FROM quests
                         WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL
                         ORDER BY RAND()
-                        LIMIT 1
+                        LIMIT 2
                     ) AS subquery3
                     UNION ALL
                     SELECT id FROM (
@@ -695,6 +695,36 @@ app.get('/monster', async (req, res) => {
         const [monsterResults] = await db.query(
             'SELECT * FROM monsters WHERE name = ?',
             [monsterName]
+        );
+
+        if (monsterResults.length === 0) {
+            return res.status(404).json({ error: 'Monster not found' });
+        }
+
+        const monsterResult = monsterResults[0];
+
+        // Log the equipment data for debugging
+        // console.log("Mapped Equipment Data:", equipment);
+
+        // Send the response with user data, inventory, and equipment
+        res.status(200).json(monsterResult);
+    } catch (error) {
+        console.error('Error fetching monster data:', error.message);
+        res.status(500).json({ error: 'Failed to fetch monster data' });
+    }
+});
+
+app.get('/allMonsters', async (req, res) => {
+    const { monsterName } = req.query;
+    
+    if (!monsterName) {
+        return res.status(400).json({ error: 'Monster name is required' });
+    }
+
+    try {
+        // Fetch the user's account data
+        const [monsterResults] = await db.query(
+            'SELECT * FROM monsters'
         );
 
         if (monsterResults.length === 0) {
