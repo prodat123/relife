@@ -715,12 +715,6 @@ app.get('/monster', async (req, res) => {
 });
 
 app.get('/allMonsters', async (req, res) => {
-    const { monsterName } = req.query;
-    
-    if (!monsterName) {
-        return res.status(400).json({ error: 'Monster name is required' });
-    }
-
     try {
         // Fetch the user's account data
         const [monsterResults] = await db.query(
