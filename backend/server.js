@@ -725,13 +725,13 @@ app.get('/allMonsters', async (req, res) => {
             return res.status(404).json({ error: 'Monster not found' });
         }
 
-        const monsterResult = monsterResults[0];
+        // const monsterResult = monsterResults[0];
 
         // Log the equipment data for debugging
         // console.log("Mapped Equipment Data:", equipment);
 
         // Send the response with user data, inventory, and equipment
-        res.status(200).json(monsterResult);
+        res.status(200).json(monsterResults);
     } catch (error) {
         console.error('Error fetching monster data:', error.message);
         res.status(500).json({ error: 'Failed to fetch monster data' });
