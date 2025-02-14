@@ -1068,8 +1068,6 @@ app.get('/shop/items', async (req, res) => {
     }
 });
 
-
-
 app.post('/shop/buy', async (req, res) => {
     const { userId, itemId, price: discountedPrice, isGacha } = req.body;
 
@@ -1156,7 +1154,120 @@ app.post('/shop/buy', async (req, res) => {
     }
 });
 
+app.get('/shop/spells', async (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit, 10) || 100;
+        const offset = parseInt(req.query.offset, 10) || 0;
 
+        const [items] = await db.query(`
+            SELECT 
+                si.id AS shop_spell_id,
+                i.name,
+                si.price,
+                i.type,
+                i.stats,
+                i.image_url,
+                i.description
+            FROM 
+                shop_items si
+            JOIN 
+                spells i ON si.item_id = i.id
+            ORDER BY si.price ASC
+            LIMIT ? OFFSET ?
+        `, [limit, offset]);
+
+        res.json(items);
+    } catch (error) {
+        console.error('Error fetching shop items:', error);
+        res.status(500).json({ error: 'Failed to fetch shop items.' });
+    }
+});
+
+app.post('/spell-shop/buy', async (req, res) => {
+    const { userId, spellId, price: discountedPrice, isGacha } = req.body;
+
+    if (!userId || !spellId || discountedPrice === undefined) {
+        return res.status(400).json({ error: 'Invalid request parameters.' });
+    }
+
+    try {
+        // Fetch spell details
+        const [spellDetails] = await db.query(
+            `SELECT s.*, ss.price 
+             FROM spell_shop ss 
+             JOIN spells s ON ss.spell_id = s.id 
+             WHERE s.id = ?`,
+            [spellId]
+        );
+
+        if (spellDetails.length === 0) {
+            return res.status(404).json({ error: 'Spell not found.' });
+        }
+
+        const { price, stat, ...spell } = spellDetails[0];
+
+        // Set final price based on Gacha or Discount
+        const finalPrice = isGacha ? 50 : discountedPrice;
+
+        // Validate Discount
+        const calculatedDiscountedPrice = Math.max(
+            Math.floor(price * (1 - (req.body.discount / 100 || 0))),
+            1
+        );
+
+        if (!isGacha && discountedPrice !== calculatedDiscountedPrice) {
+            return res.status(400).json({ error: 'Invalid discounted price.' });
+        }
+
+        // Fetch user details
+        const [user] = await db.query(
+            `SELECT currency, ownedSpells FROM users WHERE id = ?`,
+            [userId]
+        );
+
+        if (user.length === 0) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
+        let { currency, ownedSpells } = user[0];
+        ownedSpells = JSON.parse(ownedSpells || '[]'); // Ensure ownedSpells is an array
+
+        // Check if user has enough currency
+        if (currency < finalPrice) {
+            return res.status(400).json({ error: 'Not enough currency.' });
+        }
+
+        // Deduct currency
+        currency -= finalPrice;
+
+        // Parse spell stats safely
+        let spellStats = JSON.parse(stat || '{}');
+
+        // Prepare spell object with a unique ID
+        let newSpell = { ...spell, stat: spellStats, id: uuidv4() };
+
+        // Append spell to user's owned spells
+        ownedSpells.push(newSpell);
+
+        // Update user's currency and owned spells
+        await db.query(
+            `UPDATE users
+             SET currency = ?, ownedSpells = ?
+             WHERE id = ?`,
+            [currency, JSON.stringify(ownedSpells), userId]
+        );
+
+        res.json({
+            success: true,
+            message: `You have successfully purchased the ${spell.name}.`,
+            updatedCurrency: currency,
+            updatedInventory: ownedSpells,
+        });
+    } catch (err) {
+        console.error('Error purchasing spell:', err.message, err.stack);
+        res.status(500).json({ error: 'Failed to purchase spell.' });
+    }
+});
 
 
 app.post('/spin-wheel', async (req, res) => {
