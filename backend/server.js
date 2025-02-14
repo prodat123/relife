@@ -1109,16 +1109,15 @@ app.post('/shop/buy', async (req, res) => {
 
         // Fetch user details
         const [user] = await db.query(
-            `SELECT currency, inventory, stats FROM users WHERE id = ?`,
+            `SELECT currency, inventory FROM users WHERE id = ?`,
             [userId]
         );
         if (user.length === 0) {
             return res.status(404).json({ error: 'User not found.' });
         }
 
-        let { currency, inventory, stats: userStats } = user[0];
-        inventory = JSON.parse(inventory || '[]');
-        userStats = JSON.parse(userStats || '{}');
+        let { currency, inventory } = user[0];
+        inventory = JSON.parse(inventory || '[]'); // Ensure inventory is an array
 
         // Check if user has enough currency
         if (currency < finalPrice) {
@@ -1128,13 +1127,16 @@ app.post('/shop/buy', async (req, res) => {
         // Deduct currency
         currency -= finalPrice;
 
-        // Prepare item with random stat modifiers and a unique UUID
-        let itemStats = { ...item, id: uuidv4() };
+        // Parse item stats (ensuring it's an object)
+        let itemStats = JSON.parse(stats || '{}');
 
-        // Append modified item to inventory
-        inventory.push(itemStats);
+        // Prepare item with stats and a unique UUID
+        let newItem = { ...item, stats: itemStats, id: uuidv4() };
 
-        // Update user's inventory and currency
+        // Append item to inventory
+        inventory.push(newItem);
+
+        // Update user's inventory and currency in the database
         await db.query(
             `UPDATE users
              SET currency = ?, inventory = ?
@@ -1153,6 +1155,7 @@ app.post('/shop/buy', async (req, res) => {
         res.status(500).json({ error: 'Failed to purchase item.' });
     }
 });
+
 
 
 
