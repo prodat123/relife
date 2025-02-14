@@ -1252,10 +1252,10 @@ app.post('/spell-shop/buy', async (req, res) => {
         currency -= finalPrice;
 
         // Parse spell stats safely
-        let spellStats = JSON.parse(stat || '{}');
+        // let spellStats = JSON.parse(stat || '{}');
 
         // Prepare spell object with a unique ID
-        let newSpell = { ...spell, stat: spellStats, id: uuidv4() };
+        let newSpell = { ...spell, stat: stat, id: uuidv4() };
 
         // Append spell to user's owned spells
         ownedSpells.push(newSpell);
