@@ -1053,7 +1053,8 @@ app.get('/shop/items', async (req, res) => {
                 i.type,
                 i.stats,
                 i.image_url,
-                i.description
+                i.description,
+                i.levelRequired
             FROM 
                 shop_items si
             JOIN 
