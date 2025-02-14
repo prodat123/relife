@@ -1156,8 +1156,14 @@ app.post('/shop/buy', async (req, res) => {
 
 app.get('/shop/spells', async (req, res) => {
     try {
-        const limit = parseInt(req.query.limit, 10) || 100;
-        const offset = parseInt(req.query.offset, 10) || 0;
+        const limit = Number(req.query.limit) || 100;
+        const offset = Number(req.query.offset) || 0;
+
+        if (isNaN(limit) || isNaN(offset)) {
+            return res.status(400).json({ error: 'Invalid limit or offset' });
+        }
+
+        console.log(`Fetching spells with limit=${limit} and offset=${offset}`);
 
         const [items] = await db.query(`
             SELECT 
@@ -1165,9 +1171,11 @@ app.get('/shop/spells', async (req, res) => {
                 i.name,
                 si.price,
                 i.type,
-                i.stats,
-                i.image_url,
-                i.description
+                i.stat, 
+                i.mana_cost, 
+                i.cooldown, 
+                i.duration, 
+                i.intelligenceRequired
             FROM 
                 shop_items si
             JOIN 
@@ -1176,12 +1184,14 @@ app.get('/shop/spells', async (req, res) => {
             LIMIT ? OFFSET ?
         `, [limit, offset]);
 
+        console.log('Fetched items:', items);
         res.json(items);
     } catch (error) {
-        console.error('Error fetching shop items:', error);
-        res.status(500).json({ error: 'Failed to fetch shop items.' });
+        console.error('Error fetching shop spells:', error);
+        res.status(500).json({ error: 'Failed to fetch shop spells.' });
     }
 });
+
 
 app.post('/spell-shop/buy', async (req, res) => {
     const { userId, spellId, price: discountedPrice, isGacha } = req.body;
