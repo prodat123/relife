@@ -866,12 +866,12 @@ app.post('/update-equipment', async (req, res) => {
 });
 
 
-app.get('/items/:itemId', async (req, res) => {
-    const { itemId } = req.params;  // Get the itemId from the request parameter
+app.get('/items/:itemName', async (req, res) => {
+    const { itemName } = req.params;  // Get the itemId from the request parameter
 
     try {
         // Query to fetch the item from the database
-        const results = await db.query('SELECT * FROM items WHERE id = ?', [itemId]);
+        const results = await db.query('SELECT * FROM items WHERE name = ?', [itemName]);
 
         if (results.length > 0) {
             res.json(results[0]);  // Return the item as JSON if found
