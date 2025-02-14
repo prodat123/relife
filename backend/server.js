@@ -1178,7 +1178,7 @@ app.get('/shop/spells', async (req, res) => {
                 i.duration, 
                 i.intelligenceRequired
             FROM 
-                shop_items si
+                shop_spells si
             JOIN 
                 spells i ON si.item_id = i.id
             ORDER BY si.price ASC
@@ -1205,7 +1205,7 @@ app.post('/spell-shop/buy', async (req, res) => {
         // Fetch spell details with new columns
         const [spellDetails] = await db.query(
             `SELECT s.*, ss.price 
-             FROM spell_shop ss 
+             FROM shop_spells ss 
              JOIN spells s ON ss.spell_id = s.id 
              WHERE s.id = ?`,
             [spellId]
