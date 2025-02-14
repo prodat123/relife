@@ -1202,7 +1202,7 @@ app.post('/spell-shop/buy', async (req, res) => {
     }
 
     try {
-        // Fetch spell details
+        // Fetch spell details with new columns
         const [spellDetails] = await db.query(
             `SELECT s.*, ss.price 
              FROM spell_shop ss 
@@ -1215,7 +1215,7 @@ app.post('/spell-shop/buy', async (req, res) => {
             return res.status(404).json({ error: 'Spell not found.' });
         }
 
-        const { price, stat, ...spell } = spellDetails[0];
+        const { price, stat, mana_cost, cooldown, duration, intelligenceRequired, ...spell } = spellDetails[0];
 
         // Set final price based on Gacha or Discount
         const finalPrice = isGacha ? 50 : discountedPrice;
@@ -1251,11 +1251,16 @@ app.post('/spell-shop/buy', async (req, res) => {
         // Deduct currency
         currency -= finalPrice;
 
-        // Parse spell stats safely
-        // let spellStats = JSON.parse(stat || '{}');
-
-        // Prepare spell object with a unique ID
-        let newSpell = { ...spell, stat: stat, id: uuidv4() };
+        // Prepare spell object with a unique ID including new attributes
+        let newSpell = { 
+            ...spell, 
+            stat, 
+            mana_cost, 
+            cooldown, 
+            duration, 
+            intelligenceRequired, 
+            id: uuidv4() 
+        };
 
         // Append spell to user's owned spells
         ownedSpells.push(newSpell);
@@ -1263,7 +1268,7 @@ app.post('/spell-shop/buy', async (req, res) => {
         // Update user's currency and owned spells
         await db.query(
             `UPDATE users
-             SET currency = ?, ownedSpells = ?
+             SET currency = ?, ownedSpells = ? 
              WHERE id = ?`,
             [currency, JSON.stringify(ownedSpells), userId]
         );
@@ -1279,6 +1284,7 @@ app.post('/spell-shop/buy', async (req, res) => {
         res.status(500).json({ error: 'Failed to purchase spell.' });
     }
 });
+
 
 
 app.post('/spin-wheel', async (req, res) => {
