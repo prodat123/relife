@@ -1180,7 +1180,7 @@ app.get('/shop/spells', async (req, res) => {
             FROM 
                 shop_spells si
             JOIN 
-                spells i ON si.item_id = i.id
+                spells i ON si.spell_id = i.id
             ORDER BY si.price ASC
             LIMIT ? OFFSET ?
         `, [limit, offset]);
