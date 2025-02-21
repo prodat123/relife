@@ -132,123 +132,83 @@ const insertDailyQuests = async () => {
 
     const insertQuery = `
         INSERT INTO daily_quests (date, quest_id)
-            SELECT CURDATE(), id
+        SELECT CURDATE(), id
+        FROM (
+            SELECT DISTINCT id
             FROM (
-                SELECT DISTINCT id
-                FROM (
-                    SELECT id FROM (
-                        SELECT id FROM quests
-                        WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL
-                        ORDER BY RAND()
-                        LIMIT 2
-                    ) AS subquery1
-                    UNION ALL
-                    SELECT id FROM (
-                        SELECT id FROM quests
-                        WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL
-                        ORDER BY RAND()
-                        LIMIT 2
-                    ) AS subquery2
-                    UNION ALL
-                    SELECT id FROM (
-                        SELECT id FROM quests
-                        WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL
-                        ORDER BY RAND()
-                        LIMIT 2
-                    ) AS subquery3
-                    UNION ALL
-                    SELECT id FROM (
-                        SELECT id FROM quests
-                        WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL
-                        ORDER BY RAND()
-                        LIMIT 1
-                    ) AS subquery4
-                    UNION ALL
-                    SELECT id FROM (
-                        SELECT id FROM quests
-                        WHERE difficulty = 1
-                        ORDER BY RAND()
-                        LIMIT 2
-                    ) AS subquery5
-                    UNION ALL
-                    SELECT id FROM (
-                        SELECT id FROM quests
-                        WHERE difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL
-                        ORDER BY RAND()
-                        LIMIT 1
-                    ) AS subquery6
-                    UNION ALL
-                    SELECT id FROM (
-                        SELECT id FROM quests
-                        WHERE difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL
-                        ORDER BY RAND()
-                        LIMIT 1
-                    ) AS subquery7
-                    UNION ALL
-                    SELECT id FROM (
-                        SELECT id FROM quests
-                        WHERE difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL
-                        ORDER BY RAND()
-                        LIMIT 1
-                    ) AS subquery8
-                    UNION ALL
-                    SELECT id FROM (
-                        SELECT id FROM quests
-                        WHERE difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL
-                        ORDER BY RAND()
-                        LIMIT 1
-                    ) AS subquery9
-                    UNION ALL
-                    SELECT id FROM (
-                        SELECT id FROM quests
-                        WHERE difficulty = 2
-                        ORDER BY RAND()
-                        LIMIT 2
-                    ) AS subquery10
-                    UNION ALL
-                    SELECT id FROM (
-                        SELECT id FROM quests
-                        WHERE difficulty IN (3, 4, 5) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL
-                        ORDER BY RAND()
-                        LIMIT 3
-                    ) AS subquery11
-                    UNION ALL
-                    SELECT id FROM (
-                        SELECT id FROM quests
-                        WHERE difficulty IN (3, 4, 5) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL
-                        ORDER BY RAND()
-                        LIMIT 3
-                    ) AS subquery12
-                    UNION ALL
-                    SELECT id FROM (
-                        SELECT id FROM quests
-                        WHERE difficulty IN (3, 4, 5) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL
-                        ORDER BY RAND()
-                        LIMIT 3
-                    ) AS subquery13
-                    UNION ALL
-                    SELECT id FROM (
-                        SELECT id FROM quests
-                        WHERE difficulty IN (3, 4, 5) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL
-                        ORDER BY RAND()
-                        LIMIT 3
-                    ) AS subquery14
-                    UNION ALL
-                    SELECT id FROM (
-                        SELECT id FROM quests
-                        WHERE difficulty IN (3, 4, 5)
-                        ORDER BY RAND()
-                        LIMIT 6
-                    ) AS subquery15
-                ) AS selected_quests
-            ) AS final_quests
-            WHERE id NOT IN (
-                SELECT quest_id
-                FROM daily_quests
-                WHERE date = CURDATE()
-            );
+                -- Difficulty 1-5 (Existing)
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery1
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery2
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery3
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery4
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 1 ORDER BY RAND() LIMIT 2) AS subquery5
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery6
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery7
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery8
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery9
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 2 ORDER BY RAND() LIMIT 2) AS subquery10
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery11
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery12
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery13
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery14
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (3,4,5) ORDER BY RAND() LIMIT 6) AS subquery15
 
+                -- Difficulty 6-8
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery16
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery17
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery18
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery19
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (6,7,8) ORDER BY RAND() LIMIT 6) AS subquery20
+
+                -- Difficulty 9-10
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery21
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery22
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery23
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery24
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (9,10) ORDER BY RAND() LIMIT 8) AS subquery25
+
+                -- Difficulty 11-12 (Most difficult, select the most challenging quests)
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery26
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery27
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery28
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery29
+                UNION ALL
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (11,12) ORDER BY RAND() LIMIT 10) AS subquery30
+            ) AS selected_quests
+        ) AS final_quests
+        WHERE id NOT IN (
+            SELECT quest_id FROM daily_quests WHERE date = CURDATE()
+        );
     `;
+
 
     try {
         // Delete previous daily quests before the current date
