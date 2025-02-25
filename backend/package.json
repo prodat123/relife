@@ -22,7 +22,6 @@
     "express": "^4.21.1",
     "google-auth-library": "^9.15.1",
     "isomorphic-fetch": "^3.0.0",
-    "moment-timezone": "^0.5.47",
     "mysql2": "^3.11.4",
     "node-cron": "^3.0.3",
     "node-fetch": "^2.7.0",
