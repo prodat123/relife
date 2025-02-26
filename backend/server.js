@@ -1895,353 +1895,350 @@ app.post('/getSpellData', async (req, res) => {
     }
 });
 
-// app.get('/garden', async (req, res) => { 
-//     const { userId } = req.query;
+app.get('/garden', async (req, res) => { 
+    const { userId } = req.query;
     
-//     try {
-//         const [gardens] = await db.query(`
-//             SELECT pg.id, s.name, pg.planted_at, pg.last_watered_at, pg.status, 
-//                    pg.last_wilted_at, pg.total_progress, pg.next_water_time, s.growth_time, s.wilt_time
-//             FROM player_garden pg
-//             JOIN seeds s ON pg.seed_id = s.id
-//             WHERE pg.player_id = ?`, 
-//             [userId]
-//         );
+    try {
+        const [gardens] = await db.query(`
+            SELECT pg.id, s.name, pg.planted_at, pg.last_watered_at, pg.status, 
+                   pg.last_wilted_at, pg.total_progress, pg.next_water_time, s.growth_time, s.wilt_time
+            FROM player_garden pg
+            JOIN seeds s ON pg.seed_id = s.id
+            WHERE pg.player_id = ?`, 
+            [userId]
+        );
 
-//         const currentTime = Math.floor(Date.now() / 1000); // Current timestamp
+        const currentTime = Math.floor(Date.now() / 1000); // Current timestamp
 
-//         for (const plant of gardens) {
-//             const plantedAt = plant.planted_at 
-//                 ? Math.floor(new Date(plant.planted_at).getTime() / 1000)
-//                 : 0;
-//             const lastWatered = plant.last_watered_at 
-//                 ? Math.floor(new Date(plant.last_watered_at).getTime() / 1000)
-//                 : plantedAt;
-//             const lastWilted = plant.last_wilted_at 
-//                 ? Math.floor(new Date(plant.last_wilted_at).getTime() / 1000)
-//                 : 0;
-//             const nextWaterTime = plant.next_water_time 
-//                 ? Math.floor(new Date(plant.next_water_time).getTime() / 1000)
-//                 : plantedAt;
+        for (const plant of gardens) {
+            const plantedAt = plant.planted_at 
+                ? Math.floor(new Date(plant.planted_at).getTime() / 1000)
+                : 0;
+            const lastWatered = plant.last_watered_at 
+                ? Math.floor(new Date(plant.last_watered_at).getTime() / 1000)
+                : plantedAt;
+            const lastWilted = plant.last_wilted_at 
+                ? Math.floor(new Date(plant.last_wilted_at).getTime() / 1000)
+                : 0;
+            const nextWaterTime = plant.next_water_time 
+                ? Math.floor(new Date(plant.next_water_time).getTime() / 1000)
+                : plantedAt;
 
-//             const growthTimeSec = plant.growth_time; 
-//             const wiltTimeSec = plant.wilt_time;
+            const growthTimeSec = plant.growth_time; 
+            const wiltTimeSec = plant.wilt_time;
 
-//             const totalProgress = plant.total_progress;
+            const totalProgress = plant.total_progress;
 
-//             const timeSinceLastWatered = currentTime - lastWatered;
+            const timeSinceLastWatered = currentTime - lastWatered;
 
-//             if (!plantedAt) continue;
+            if (!plantedAt) continue;
 
-//             let effectiveGrowingTime = currentTime - plantedAt;
-//             if (lastWilted && lastWilted > plantedAt) {
-//                 effectiveGrowingTime -= Math.max(currentTime - lastWilted, 0);
-//             }
+            let effectiveGrowingTime = currentTime - plantedAt;
+            if (lastWilted && lastWilted > plantedAt) {
+                effectiveGrowingTime -= Math.max(currentTime - lastWilted, 0);
+            }
 
-//             const computedTimeLeft = Math.max(growthTimeSec - effectiveGrowingTime, 0);
+            const computedTimeLeft = Math.max(growthTimeSec - effectiveGrowingTime, 0);
             
-//             // Approximate time remaining
-//             let timeLeftApprox = "Less than a minute";
-//             if (computedTimeLeft > 3600) {
-//                 timeLeftApprox = `${Math.ceil(computedTimeLeft / 3600)} hours left`;
-//             } else if (computedTimeLeft > 60) {
-//                 timeLeftApprox = `${Math.ceil(computedTimeLeft / 60)} minutes left`;
-//             }
-//             plant.computedTimeLeft = timeLeftApprox;
+            // Approximate time remaining
+            let timeLeftApprox = "Less than a minute";
+            if (computedTimeLeft > 3600) {
+                timeLeftApprox = `${Math.ceil(computedTimeLeft / 3600)} hours left`;
+            } else if (computedTimeLeft > 60) {
+                timeLeftApprox = `${Math.ceil(computedTimeLeft / 60)} minutes left`;
+            }
+            plant.computedTimeLeft = timeLeftApprox;
 
-//             // if (currentTime >= nextWaterTime && (nextWaterTime - lastWatered) < plant.wilt_time) {
-//             //     await db.query(
-//             //         `UPDATE player_garden SET status = 'harvestable' WHERE id = ?`, 
-//             //         [plant.id]
-//             //     );
+            // if (currentTime >= nextWaterTime && (nextWaterTime - lastWatered) < plant.wilt_time) {
+            //     await db.query(
+            //         `UPDATE player_garden SET status = 'harvestable' WHERE id = ?`, 
+            //         [plant.id]
+            //     );
 
-//             //     plant.status = 'harvestable';
-//             //     continue;
-//             // }
-//             if (totalProgress >= growthTimeSec) {
-//                 await db.query(
-//                     `UPDATE player_garden SET status = 'harvestable' WHERE id = ?`, 
-//                     [plant.id]
-//                 );
-//                 plant.status = 'harvestable';
-//                 continue;
-//             }
+            //     plant.status = 'harvestable';
+            //     continue;
+            // }
+            if (totalProgress >= growthTimeSec) {
+                await db.query(
+                    `UPDATE player_garden SET status = 'harvestable' WHERE id = ?`, 
+                    [plant.id]
+                );
+                plant.status = 'harvestable';
+                continue;
+            }
 
-//             // if (timeSinceLastWatered >= plant.wilt_time) {
-//             //     console.log(`Plant ${plant.id} should be wilted.`);
-//             //     await db.query(
-//             //         `UPDATE player_garden 
-//             //         SET status = 'wilted', last_wilted_at = ? 
-//             //         WHERE id = ?`, 
-//             //         [new Date(currentTime * 1000), plant.id]
-//             //     );
-//             // }
-//         }
+            // if (timeSinceLastWatered >= plant.wilt_time) {
+            //     console.log(`Plant ${plant.id} should be wilted.`);
+            //     await db.query(
+            //         `UPDATE player_garden 
+            //         SET status = 'wilted', last_wilted_at = ? 
+            //         WHERE id = ?`, 
+            //         [new Date(currentTime * 1000), plant.id]
+            //     );
+            // }
+        }
 
-//         res.json(gardens);
-//     } catch (err) {
-//         console.error(err);
-//         res.status(500).json({ error: "Failed to fetch garden data" });
-//     }
-// });
+        res.json(gardens);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch garden data" });
+    }
+});
 
-// app.get('/plant', async (req, res) => {
-//     const { userId, plantId } = req.query;
+app.get('/plant', async (req, res) => {
+    const { userId, plantId } = req.query;
 
-//     try {
-//         // Select plant details with row lock removed (no transaction)
-//         const [gardens] = await db.query(`
-//             SELECT pg.id, s.name, pg.planted_at, pg.last_watered_at, pg.status, 
-//                    pg.last_wilted_at, pg.total_progress, pg.next_water_time, 
-//                    s.growth_time, s.wilt_time
-//             FROM player_garden pg
-//             JOIN seeds s ON pg.seed_id = s.id
-//             WHERE pg.player_id = ? AND pg.id = ?`,
-//             [userId, plantId]
-//         );
+    try {
+        // Select plant details with row lock removed (no transaction)
+        const [gardens] = await db.query(`
+            SELECT pg.id, s.name, pg.planted_at, pg.last_watered_at, pg.status, 
+                   pg.last_wilted_at, pg.total_progress, pg.next_water_time, 
+                   s.growth_time, s.wilt_time
+            FROM player_garden pg
+            JOIN seeds s ON pg.seed_id = s.id
+            WHERE pg.player_id = ? AND pg.id = ?`,
+            [userId, plantId]
+        );
 
-//         if (gardens.length === 0) {
-//             return res.status(404).json({ error: "Garden not found" });
-//         }
+        if (gardens.length === 0) {
+            return res.status(404).json({ error: "Garden not found" });
+        }
 
-//         const plant = gardens[0];
-//         const currentTime = Math.floor(Date.now() / 1000);
+        const plant = gardens[0];
+        const currentTime = Math.floor(Date.now() / 1000);
 
-//         const lastWatered = plant.last_watered_at 
-//             ? Math.floor(new Date(plant.last_watered_at).getTime() / 1000)
-//             : Math.floor(new Date(plant.planted_at).getTime() / 1000);
+        const lastWatered = plant.last_watered_at 
+            ? Math.floor(new Date(plant.last_watered_at).getTime() / 1000)
+            : Math.floor(new Date(plant.planted_at).getTime() / 1000);
 
-//         let nextWaterTime = plant.next_water_time 
-//             ? Math.floor(new Date(plant.next_water_time).getTime() / 1000)
-//             : lastWatered;
+        let nextWaterTime = plant.next_water_time 
+            ? Math.floor(new Date(plant.next_water_time).getTime() / 1000)
+            : lastWatered;
 
-//         const timeSinceLastWatered = currentTime - lastWatered;
-//         console.log((nextWaterTime - lastWatered) < plant.wilt_time)
-//         if (currentTime >= nextWaterTime && (nextWaterTime - lastWatered) < plant.wilt_time) {
-//             db.query(
-//                 `UPDATE player_garden SET status = 'harvestable' WHERE id = ?`, 
-//                 [plant.id]
-//             );
-//         }
+        const timeSinceLastWatered = currentTime - lastWatered;
+        console.log((nextWaterTime - lastWatered) < plant.wilt_time)
+        if (currentTime >= nextWaterTime && (nextWaterTime - lastWatered) < plant.wilt_time) {
+            db.query(
+                `UPDATE player_garden SET status = 'harvestable' WHERE id = ?`, 
+                [plant.id]
+            );
+        }
 
-//         if (timeSinceLastWatered >= plant.wilt_time) {
-//             await db.query(
-//                 `UPDATE player_garden 
-//                 SET status = 'wilted', last_wilted_at = ? 
-//                 WHERE id = ?`, 
-//                 [new Date(currentTime * 1000), plant.id]
-//             );
-//         }
+        if (timeSinceLastWatered >= plant.wilt_time) {
+            await db.query(
+                `UPDATE player_garden 
+                SET status = 'wilted', last_wilted_at = ? 
+                WHERE id = ?`, 
+                [new Date(currentTime * 1000), plant.id]
+            );
+        }
 
-//         nextWaterTime = lastWatered + plant.wilt_time;
-//         let newTotalProgress = (plant.total_progress || 0) + plant.wilt_time;
+        nextWaterTime = lastWatered + plant.wilt_time;
+        let newTotalProgress = (plant.total_progress || 0) + plant.wilt_time;
 
-//         if (newTotalProgress > plant.growth_time) {
-//             newTotalProgress = plant.growth_time;
-//         }
+        if (newTotalProgress > plant.growth_time) {
+            newTotalProgress = plant.growth_time;
+        }
 
-//         console.log(`Updating total_progress: ${newTotalProgress}, next_water_time: ${new Date(nextWaterTime * 1000)}`);
+        console.log(`Updating total_progress: ${newTotalProgress}, next_water_time: ${new Date(nextWaterTime * 1000)}`);
 
-//         // Update total_progress and next_water_time without transaction
-//         db.query(`
-//             UPDATE player_garden 
-//             SET total_progress = ?, 
-//                 next_water_time = DATE_ADD(last_watered_at, INTERVAL ? SECOND) 
-//             WHERE id = ? AND player_id = ?`,
-//             [newTotalProgress, plant.wilt_time, plant.id, userId]
-//         );
+        // Update total_progress and next_water_time without transaction
+        db.query(`
+            UPDATE player_garden 
+            SET total_progress = ?, 
+                next_water_time = DATE_ADD(last_watered_at, INTERVAL ? SECOND) 
+            WHERE id = ? AND player_id = ?`,
+            [newTotalProgress, plant.wilt_time, plant.id, userId]
+        );
 
-//         res.json({ ...plant, next_water_time: new Date(nextWaterTime * 1000) });
+        res.json({ ...plant, next_water_time: new Date(nextWaterTime * 1000) });
 
-//     } catch (err) {
-//         console.error(err);
-//         res.status(500).json({ error: "Failed to fetch and update garden data" });
-//     }
-// });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch and update garden data" });
+    }
+});
 
+app.post('/garden/plant', async (req, res) => {
+    const { userId, seedId } = req.body;
+    const now = new Date();
 
+    try {
+        // Fetch the current inventory from the users table
+        const [userRows] = await db.query(`SELECT inventory FROM users WHERE id = ?`, [userId]);
 
+        if (userRows.length === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
 
-// app.post('/garden/plant', async (req, res) => {
-//     const { userId, seedId } = req.body;
-//     const now = new Date();
+        let inventory = JSON.parse(userRows[0].inventory); // Assuming inventory is stored as a JSON string
 
-//     try {
-//         // Fetch the current inventory from the users table
-//         const [userRows] = await db.query(`SELECT inventory FROM users WHERE id = ?`, [userId]);
+        // Check if the seed exists in the inventory
+        const seedIndex = inventory.findIndex(item => item.id === seedId && item.type === 'seed');
+        if (seedIndex === -1) {
+            return res.status(400).json({ error: "You don't have this seed in your inventory" });
+        }
 
-//         if (userRows.length === 0) {
-//             return res.status(404).json({ error: "User not found" });
-//         }
+        // Reduce quantity or remove seed entirely
+        if (inventory[seedIndex].quantity > 1) {
+            inventory[seedIndex].quantity -= 1;
+        } else {
+            inventory.splice(seedIndex, 1); // Remove if only 1 left
+        }
 
-//         let inventory = JSON.parse(userRows[0].inventory); // Assuming inventory is stored as a JSON string
+        // Convert inventory back to JSON and update the users table
+        await db.query(`UPDATE users SET inventory = ? WHERE id = ?`, [JSON.stringify(inventory), userId]);
 
-//         // Check if the seed exists in the inventory
-//         const seedIndex = inventory.findIndex(item => item.id === seedId && item.type === 'seed');
-//         if (seedIndex === -1) {
-//             return res.status(400).json({ error: "You don't have this seed in your inventory" });
-//         }
+        // Fetch the seed info from the seeds table
+        const [seedRows] = await db.query(`SELECT growth_time, wilt_time FROM seeds WHERE id = ?`, [seedId]);
+        if (seedRows.length === 0) {
+            return res.status(404).json({ error: "Seed not found" });
+        }
+        const seedInfo = seedRows[0];
 
-//         // Reduce quantity or remove seed entirely
-//         if (inventory[seedIndex].quantity > 1) {
-//             inventory[seedIndex].quantity -= 1;
-//         } else {
-//             inventory.splice(seedIndex, 1); // Remove if only 1 left
-//         }
-
-//         // Convert inventory back to JSON and update the users table
-//         await db.query(`UPDATE users SET inventory = ? WHERE id = ?`, [JSON.stringify(inventory), userId]);
-
-//         // Fetch the seed info from the seeds table
-//         const [seedRows] = await db.query(`SELECT growth_time, wilt_time FROM seeds WHERE id = ?`, [seedId]);
-//         if (seedRows.length === 0) {
-//             return res.status(404).json({ error: "Seed not found" });
-//         }
-//         const seedInfo = seedRows[0];
-
-//         const now = new Date();
-//         const nextWaterTime = new Date(now.getTime() + seedInfo.wilt_time * 1000);
+        const now = new Date();
+        const nextWaterTime = new Date(now.getTime() + seedInfo.wilt_time * 1000);
 
         
-//         console.log(nextWaterTime);
+        console.log(nextWaterTime);
 
-//         // Insert into player_garden (plant the seed)
-//         // We use new Date(0) for last_watered_at and last_wilted_at as placeholders.
-//         // Set time_left to the seed's growth_time so that it counts down as the plant grows.
-//         await db.query(`
-//             INSERT INTO player_garden (player_id, seed_id, planted_at, last_watered_at, last_wilted_at, status, total_progress, next_water_time)
-//             VALUES (?, ?, ?, ?, ?, 'growing', ?, ?)`, 
-//             [userId, seedId, now, now, null, 0, nextWaterTime]
-//         );
+        // Insert into player_garden (plant the seed)
+        // We use new Date(0) for last_watered_at and last_wilted_at as placeholders.
+        // Set time_left to the seed's growth_time so that it counts down as the plant grows.
+        await db.query(`
+            INSERT INTO player_garden (player_id, seed_id, planted_at, last_watered_at, last_wilted_at, status, total_progress, next_water_time)
+            VALUES (?, ?, ?, ?, ?, 'growing', ?, ?)`, 
+            [userId, seedId, now, now, null, 0, nextWaterTime]
+        );
 
-//         res.json({ message: "Seed planted and inventory updated!" });
-//     } catch (err) {
-//         console.error(err);
-//         res.status(500).json({ error: "Failed to plant seed" });
-//     }
-// });
+        res.json({ message: "Seed planted and inventory updated!" });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to plant seed" });
+    }
+});
 
-// // Water a plant
-// app.post('/garden/water', async (req, res) => {
-//     const { userId, gardenId } = req.body; // Removed lastWateredAt from the request
+// Water a plant
+app.post('/garden/water', async (req, res) => {
+    const { userId, gardenId } = req.body; // Removed lastWateredAt from the request
 
-//     try {
-//         // Fetch plant details
-//         const [plantRows] = await db.query(
-//             `SELECT * FROM player_garden WHERE id = ? AND player_id = ?`, 
-//             [gardenId, userId]
-//         );
+    try {
+        // Fetch plant details
+        const [plantRows] = await db.query(
+            `SELECT * FROM player_garden WHERE id = ? AND player_id = ?`, 
+            [gardenId, userId]
+        );
 
         
-//         if (plantRows.length === 0) {
-//             return res.status(404).json({ error: "Plant not found" });
-//         }
+        if (plantRows.length === 0) {
+            return res.status(404).json({ error: "Plant not found" });
+        }
 
-//         const plant = plantRows[0];
+        const plant = plantRows[0];
 
-//         const [seedRows] = await db.query(
-//             `SELECT * FROM seeds WHERE id = ?`, 
-//             [plant.seed_id]
-//         );
+        const [seedRows] = await db.query(
+            `SELECT * FROM seeds WHERE id = ?`, 
+            [plant.seed_id]
+        );
 
-//         const seed = seedRows[0];
+        const seed = seedRows[0];
 
-//         // Get the current date/time
-//         const now = new Date();
+        // Get the current date/time
+        const now = new Date();
         
 
 
-//         let nextWaterTime = new Date(now.getTime() + seed.wilt_time * 1000);
-//         if(plant.total_progress + seed.wilt_time >= seed.growth_time){
-//             nextWaterTime = new Date(now.getTime() + (seed.growth_time - plant.total_progress) * 1000);
-//             console.log("This is the next watering time: " + nextWaterTime);
-//         }
+        let nextWaterTime = new Date(now.getTime() + seed.wilt_time * 1000);
+        if(plant.total_progress + seed.wilt_time >= seed.growth_time){
+            nextWaterTime = new Date(now.getTime() + (seed.growth_time - plant.total_progress) * 1000);
+            console.log("This is the next watering time: " + nextWaterTime);
+        }
 
-//         // 🌱 Update plant status to 'growing' and set last_watered_at to the current date/time
-//         await db.query(
-//             `UPDATE player_garden 
-//              SET last_watered_at = ?, next_water_time = ?, status = 'growing' 
-//              WHERE id = ? AND player_id = ?`, 
-//             [now, nextWaterTime, gardenId, userId]
-//         );
+        // 🌱 Update plant status to 'growing' and set last_watered_at to the current date/time
+        await db.query(
+            `UPDATE player_garden 
+             SET last_watered_at = ?, next_water_time = ?, status = 'growing' 
+             WHERE id = ? AND player_id = ?`, 
+            [now, nextWaterTime, gardenId, userId]
+        );
 
-//         res.json({ message: "Plant watered and is now growing!", status: "growing" });
+        res.json({ message: "Plant watered and is now growing!", status: "growing" });
 
-//     } catch (err) {
-//         console.error(err);
-//         res.status(500).json({ error: "Failed to water plant" });
-//     }
-// });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to water plant" });
+    }
+});
 
-// // Harvest a plant
-// app.post('/garden/harvest', async (req, res) => {
-//     const { userId, gardenId } = req.body;
+// Harvest a plant
+app.post('/garden/harvest', async (req, res) => {
+    const { userId, gardenId } = req.body;
 
-//     try {
-//         // Fetch the plant details
-//         const [plantRows] = await db.query(
-//             `SELECT * FROM player_garden WHERE id = ? AND player_id = ?`, 
-//             [gardenId, userId]
-//         );
+    try {
+        // Fetch the plant details
+        const [plantRows] = await db.query(
+            `SELECT * FROM player_garden WHERE id = ? AND player_id = ?`, 
+            [gardenId, userId]
+        );
         
-//         if (plantRows.length === 0) {
-//             return res.status(400).json({ error: "Plant not ready for harvest" });
-//         }
+        if (plantRows.length === 0) {
+            return res.status(400).json({ error: "Plant not ready for harvest" });
+        }
 
-//         const plant = plantRows[0];
+        const plant = plantRows[0];
 
-//         // Fetch the corresponding seed data
-//         const [seedRows] = await db.query(
-//             `SELECT id, name, ingredient FROM seeds WHERE id = ?`, 
-//             [plant.seed_id]
-//         );
+        // Fetch the corresponding seed data
+        const [seedRows] = await db.query(
+            `SELECT id, name, ingredient FROM seeds WHERE id = ?`, 
+            [plant.seed_id]
+        );
 
-//         if (seedRows.length === 0) {
-//             return res.status(404).json({ error: "Seed data not found" });
-//         }
+        if (seedRows.length === 0) {
+            return res.status(404).json({ error: "Seed data not found" });
+        }
 
-//         const seed = seedRows[0];
+        const seed = seedRows[0];
 
-//         // Fetch the user's current inventory
-//         const [userRows] = await db.query(`SELECT inventory FROM users WHERE id = ?`, [userId]);
+        // Fetch the user's current inventory
+        const [userRows] = await db.query(`SELECT inventory FROM users WHERE id = ?`, [userId]);
 
-//         if (userRows.length === 0) {
-//             return res.status(404).json({ error: "User not found" });
-//         }
+        if (userRows.length === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
 
-//         let inventory = JSON.parse(userRows[0].inventory || '[]'); // Ensure it's an array
+        let inventory = JSON.parse(userRows[0].inventory || '[]'); // Ensure it's an array
 
-//         // Check if the seed already exists in the inventory
-//         let seedItem = inventory.find(item => item.id === seed.id && item.type === 'seed');
+        // Check if the seed already exists in the inventory
+        let seedItem = inventory.find(item => item.id === seed.id && item.type === 'seed');
 
-//         if (seedItem) {
-//             seedItem.quantity += 1; // Increase seed quantity
-//         } else {
-//             inventory.push({ id: seed.id, name: seed.name, type: 'seed', quantity: 1 });
-//         }
+        if (seedItem) {
+            seedItem.quantity += 1; // Increase seed quantity
+        } else {
+            inventory.push({ id: seed.id, name: seed.name, type: 'seed', quantity: 1 });
+        }
 
-//         // Add the harvested ingredient
-//         let ingredientItem = inventory.find(item => item.name === seed.ingredient && item.type === 'ingredient');
+        // Add the harvested ingredient
+        let ingredientItem = inventory.find(item => item.name === seed.ingredient && item.type === 'ingredient');
 
-//         if (ingredientItem) {
-//             ingredientItem.quantity += 1;
-//         } else {
-//             inventory.push({ name: seed.ingredient, type: 'ingredient', quantity: 1 });
-//         }
+        if (ingredientItem) {
+            ingredientItem.quantity += 1;
+        } else {
+            inventory.push({ name: seed.ingredient, type: 'ingredient', quantity: 1 });
+        }
 
-//         // Update the user's inventory in the database
-//         await db.query(`UPDATE users SET inventory = ? WHERE id = ?`, [JSON.stringify(inventory), userId]);
+        // Update the user's inventory in the database
+        await db.query(`UPDATE users SET inventory = ? WHERE id = ?`, [JSON.stringify(inventory), userId]);
 
-//         // Remove the plant from the garden
-//         await db.query(`DELETE FROM player_garden WHERE id = ?`, [gardenId]);
+        // Remove the plant from the garden
+        await db.query(`DELETE FROM player_garden WHERE id = ?`, [gardenId]);
 
-//         res.json({ message: `You harvested ${plant.name} and received 1 ${seed.name} seed and 1 ${seed.ingredient}!` });
+        res.json({ message: `You harvested ${plant.name} and received 1 ${seed.name} seed and 1 ${seed.ingredient}!` });
 
-//     } catch (err) {
-//         console.error(err);
-//         res.status(500).json({ error: "Failed to harvest plant" });
-//     }
-// });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to harvest plant" });
+    }
+});
 
 app.listen(3001, () => {
     console.log('✅ Backend running on HTTP at port 3001');
