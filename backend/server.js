@@ -6,7 +6,6 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
 const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
-const moment = require('moment-timezone');
 
 
 require('dotenv').config();
@@ -243,14 +242,17 @@ const checkAndUpdateVows = async () => {
         // Get all active vows from the database
         const [vows] = await db.query('SELECT * FROM vows WHERE status = "active"');
 
-        const currentDate = moment().tz('America/Los_Angeles').startOf('day'); // Set to local time
-
+        // Get the current date in YYYY-MM-DD format
+        const currentDate = new Date().toISOString().split('T')[0];
 
         for (const vow of vows) {
+            const vowDeadline = new Date(vow.deadline);
+            vowDeadline.setDate(vowDeadline.getDate() + 1); // Add 1 day to match moment.js behavior
 
-            const vowDeadline = moment(vow.deadline).tz('America/Los_Angeles').startOf('day').add(1, 'days');
+            // Convert to YYYY-MM-DD format for comparison
+            const vowDeadlineFormatted = vowDeadline.toISOString().split('T')[0];
 
-            if (currentDate.isAfter(vowDeadline)) {
+            if (currentDate > vowDeadlineFormatted) {
                 // Deadline passed, mark vow as incomplete
                 await db.query('UPDATE vows SET status = "incomplete" WHERE id = ?', [vow.id]);
 
@@ -258,11 +260,9 @@ const checkAndUpdateVows = async () => {
 
                 // Fetch user stats from the users table
                 const [userRows] = await db.query('SELECT stats FROM users WHERE id = ?', [vow.created_by]);
-                
-                
-                
+
                 if (userRows.length > 0) {
-                    let userStats = JSON.parse(userRows[0].stats);
+                    let userStats = JSON.parse(userRows[0].stat);
                     let statRewards = JSON.parse(vow.stat_reward);
 
                     // Subtract the stat rewards from user stats
@@ -279,12 +279,13 @@ const checkAndUpdateVows = async () => {
                 }
             }
         }
-        
+
         console.log("Vow check complete.");
     } catch (error) {
         console.error("Error processing vows:", error);
     }
 };
+
 
 
 cron.schedule('0 0 * * *', async () => { 
