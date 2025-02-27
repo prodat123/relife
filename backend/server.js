@@ -547,52 +547,53 @@ app.post('/quests/finish', async (req, res) => {
         }
 
         // Update user's inventory if an item reward exists
-        if (itemReward) {
+        // Update user's inventory if an item reward exists (30% chance)
+        if (itemReward && Math.random() < 0.3) { // 30% chance
             // Fetch current inventory
             const [user] = await db.query(
                 `SELECT inventory FROM users WHERE id = ?`,
                 [userId]
             );
-            let inventory = JSON.parse(user[0].inventory || '[]');
+            let inventory = [];
+
+            try {
+                inventory = JSON.parse(user[0].inventory) || []; // Parse inventory safely
+            } catch (error) {
+                console.error("Error parsing inventory JSON:", error);
+                inventory = []; // Default to empty array if parsing fails
+            }
 
             // Fetch the item details from the `items` table
             const [itemDetails] = await db.query(
-                `SELECT * FROM items WHERE id = ?`,
+                `SELECT id, name FROM items WHERE id = ?`,
                 [itemReward]
             );
             if (itemDetails.length === 0) {
                 return res.status(404).json({ error: 'Reward item not found.' });
             }
 
-            // Apply random plus-minus of 5 to each stat
-            let itemWithRandomStats = { ...itemDetails[0] };
+            const item = itemDetails[0];
 
-            if (itemWithRandomStats.stats) {
-                const stats = JSON.parse(itemWithRandomStats.stats);
+            // Check if the item already exists in the inventory
+            let inventoryItem = inventory.find(invItem => invItem.id === item.id);
 
-                for (let stat in stats) {
-                    const randomModifier = Math.floor(Math.random() * 7) - 3;
-                    stats[stat] += randomModifier;
-                }
-
-                // Save the updated stats back to the item
-                itemWithRandomStats.stats = JSON.stringify(stats);
+            if (inventoryItem) {
+                inventoryItem.quantity = (inventoryItem.quantity || 0) + 1; // Ensure quantity exists before incrementing
+            } else {
+                inventory.push({ id: item.id, name: item.name, quantity: 1 }); // Add new item with quantity 1
             }
-
-            // Generate a unique UUID for this item
-            itemWithRandomStats.id = uuidv4();
-
-            // Append the item object with modified stats and UUID to the inventory
-            inventory.push(itemWithRandomStats);
 
             // Save the updated inventory
             await db.query(
                 `UPDATE users
-                 SET inventory = ?
-                 WHERE id = ?`,
+                SET inventory = ?
+                WHERE id = ?`,
                 [JSON.stringify(inventory), userId]
             );
+
+            console.log("Updated Inventory:", inventory); // Debugging: Check what is being saved
         }
+
 
         res.json({ success: true, message: 'Quest marked as finished and rewards applied.' });
     } catch (err) {
@@ -1949,14 +1950,7 @@ app.get('/garden', async (req, res) => {
             }
             plant.computedTimeLeft = timeLeftApprox;
 
-            // if (currentTime >= nextWaterTime && (nextWaterTime - lastWatered) < plant.wilt_time) {
-            //     await db.query(
-            //         `UPDATE player_garden SET status = 'harvestable' WHERE id = ?`, 
-            //         [plant.id]
-            //     );
-
-            //     plant.status = 'harvestable';
-            //     continue;
+            
             // }
             if (totalProgress >= growthTimeSec) {
                 await db.query(
@@ -1967,15 +1961,7 @@ app.get('/garden', async (req, res) => {
                 continue;
             }
 
-            // if (timeSinceLastWatered >= plant.wilt_time) {
-            //     console.log(`Plant ${plant.id} should be wilted.`);
-            //     await db.query(
-            //         `UPDATE player_garden 
-            //         SET status = 'wilted', last_wilted_at = ? 
-            //         WHERE id = ?`, 
-            //         [new Date(currentTime * 1000), plant.id]
-            //     );
-            // }
+            
         }
 
         res.json(gardens);
@@ -2189,7 +2175,7 @@ app.post('/garden/harvest', async (req, res) => {
 
         // Fetch the corresponding seed data
         const [seedRows] = await db.query(
-            `SELECT id, name, ingredient FROM seeds WHERE id = ?`, 
+            `SELECT id, name, material FROM seeds WHERE id = ?`, 
             [plant.seed_id]
         );
 
@@ -2217,13 +2203,13 @@ app.post('/garden/harvest', async (req, res) => {
             inventory.push({ id: seed.id, name: seed.name, type: 'seed', quantity: 1 });
         }
 
-        // Add the harvested ingredient
-        let ingredientItem = inventory.find(item => item.name === seed.ingredient && item.type === 'ingredient');
+        // Add the harvested material
+        let materialItem = inventory.find(item => item.name === seed.material && item.type === 'material');
 
-        if (ingredientItem) {
-            ingredientItem.quantity += 1;
+        if (materialItem) {
+            materialItem.quantity += 1;
         } else {
-            inventory.push({ name: seed.ingredient, type: 'ingredient', quantity: 1 });
+            inventory.push({ name: seed.material, type: 'material', quantity: 1 });
         }
 
         // Update the user's inventory in the database
@@ -2232,13 +2218,166 @@ app.post('/garden/harvest', async (req, res) => {
         // Remove the plant from the garden
         await db.query(`DELETE FROM player_garden WHERE id = ?`, [gardenId]);
 
-        res.json({ message: `You harvested ${plant.name} and received 1 ${seed.name} seed and 1 ${seed.ingredient}!` });
+        res.json({ message: `You harvested ${plant.name} and received 1 ${seed.name} seed and 1 ${seed.material}!` });
 
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to harvest plant" });
     }
 });
+
+app.get('/seed/:id', async (req, res) => {
+    const { id } = req.params;  // Get the itemId from the request parameter
+
+    try {
+        // Query to fetch the item from the database
+        const results = await db.query('SELECT * FROM seeds WHERE id = ?', [id]);
+
+        if (results.length > 0) {
+            res.json(results[0]);  // Return the item as JSON if found
+        } else {
+            res.status(404).json({ error: 'Seed not found' });  // Item not found
+        }
+    } catch (error) {
+        console.error('Error fetching seed:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+app.get("/craftable-items", async (req, res) => {
+    try {
+        const [result] = await db.query("SELECT * FROM craftable_items");
+        console.log(result);
+        // Convert recipe from text to JSON
+        const formattedItems = result.map(item => ({
+            ...item,
+            recipe: JSON.parse(item.recipe) // Convert text to JSON
+        }));
+
+        res.json(formattedItems);
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch craftable items" });
+    }
+});
+
+app.post('/craft', async (req, res) => {
+    const { userId, itemId, quantity } = req.body;
+
+    try {
+        // Fetch craftable item details
+        const [craftableRows] = await db.query(
+            `SELECT * FROM craftable_items WHERE id = ?`, 
+            [itemId]
+        );
+
+        if (craftableRows.length === 0) {
+            return res.status(404).json({ error: "Craftable item not found" });
+        }
+
+        const craftableItem = craftableRows[0];
+        const recipe = JSON.parse(craftableItem.recipe); // Recipe is stored as a JSON object
+        const itemStats = JSON.parse(craftableItem.stats || '{}'); // Ensure stat is parsed as JSON
+
+        // Fetch user's inventory
+        const [userRows] = await db.query(`SELECT inventory FROM users WHERE id = ?`, [userId]);
+
+        if (userRows.length === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        let inventory = JSON.parse(userRows[0].inventory || '[]'); // Ensure it's an array
+
+        // Check if the user has enough materials
+        for (const [material, reqQty] of Object.entries(recipe)) {
+            const materialItem = inventory.find(item => item.name === material && item.type === 'material');
+            if (!materialItem || materialItem.quantity < reqQty * quantity) {
+                return res.status(400).json({ error: `Not enough ${material} to craft ${craftableItem.name}` });
+            }
+        }
+
+        // Deduct materials from inventory
+        for (const [material, reqQty] of Object.entries(recipe)) {
+            let materialItem = inventory.find(item => item.name === material && item.type === 'material');
+            materialItem.quantity -= reqQty * quantity;
+        }
+
+        // Add crafted item to inventory
+        let craftedItem = inventory.find(item => item.name === craftableItem.name);
+        if (craftedItem) {
+            craftedItem.quantity += quantity;
+        } else {
+            inventory.push({ 
+                name: craftableItem.name, 
+                type: craftableItem.type, 
+                quantity, 
+                stats: itemStats // Ensure stats are properly stored as JSON
+            });
+        }
+
+        // Update the user's inventory in the database
+        await db.query(`UPDATE users SET inventory = ? WHERE id = ?`, [JSON.stringify(inventory), userId]);
+
+        res.json({ message: `Successfully crafted ${quantity} ${craftableItem.name}` });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to craft item" });
+    }
+});
+
+app.post('/consume', async (req, res) => {
+    const { userId, itemId, quantity } = req.body;
+
+    try {
+        // Fetch user's inventory
+        const [userRows] = await db.query(`SELECT inventory FROM users WHERE id = ?`, [userId]);
+
+        if (userRows.length === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        let inventory = JSON.parse(userRows[0].inventory || '[]'); // Ensure it's an array
+
+        // Find the consumable item in inventory
+        let consumableItem = inventory.find(item => item.name === itemId && item.type === 'consumable');
+
+        if (!consumableItem) {
+            return res.status(400).json({ error: "Item not found or not consumable" });
+        }
+
+        if (consumableItem.quantity < quantity) {
+            return res.status(400).json({ error: `Not enough ${consumableItem.name} to consume` });
+        }
+
+        // Extract item stats before consuming
+        const itemStats =consumableItem.stats || {}; // Ensure it's an object
+
+        // Subtract the quantity
+        consumableItem.quantity -= quantity;
+
+        // Remove item if quantity reaches zero
+        if (consumableItem.quantity <= 0) {
+            inventory = inventory.filter(item => item.name !== itemId);
+        }
+
+        // Update the user's inventory in the database
+        await db.query(`UPDATE users SET inventory = ? WHERE id = ?`, [JSON.stringify(inventory), userId]);
+
+        res.json({
+            message: `Successfully consumed ${quantity} ${consumableItem.name}`,
+            stats: itemStats,
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to consume item" });
+    }
+});
+
+
+
+
+  
 
 app.listen(3001, () => {
     console.log('✅ Backend running on HTTP at port 3001');
