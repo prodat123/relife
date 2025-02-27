@@ -2218,7 +2218,7 @@ app.post('/garden/harvest', async (req, res) => {
         // Remove the plant from the garden
         await db.query(`DELETE FROM player_garden WHERE id = ?`, [gardenId]);
 
-        res.json({ message: `You harvested ${plant.name} and received 1 ${seed.name} seed and 1 ${seed.material}!` });
+        res.json({ message: `You received 1 ${seed.name} seed and 1 ${seed.material}!` });
 
     } catch (err) {
         console.error(err);
