@@ -144,7 +144,7 @@ const insertDailyQuests = async () => {
                 UNION ALL
                 SELECT id FROM (SELECT id FROM quests WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery3
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery4
+                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery4
                 UNION ALL
                 SELECT id FROM (SELECT id FROM quests WHERE difficulty = 1 ORDER BY RAND() LIMIT 2) AS subquery5
                 UNION ALL
@@ -548,7 +548,7 @@ app.post('/quests/finish', async (req, res) => {
 
         // Update user's inventory if an item reward exists
         // Update user's inventory if an item reward exists (30% chance)
-        if (itemReward && Math.random() < 0.3) { // 30% chance
+        if (itemReward) { // 30% chance
             // Fetch current inventory
             const [user] = await db.query(
                 `SELECT inventory FROM users WHERE id = ?`,
@@ -638,7 +638,6 @@ app.get('/quests/daily', async (req, res) => {
     }
 });
 
-
 app.get('/account', async (req, res) => {
     const { userId } = req.query;
 
@@ -649,7 +648,7 @@ app.get('/account', async (req, res) => {
     try {
         // Fetch the user's account data
         const [userResults] = await db.query(
-            'SELECT username, experience, level, stats, head, torso, legs, feet, weapon, inventory, currency, discount, last_spin, spells, ownedSpells, badges FROM users WHERE id = ?',
+            'SELECT * FROM users WHERE id = ?',
             [userId]
         );
 
@@ -694,6 +693,9 @@ app.get('/account', async (req, res) => {
             spells: user.spells,
             ownedSpells: user.ownedSpells,
             badges: user.badges,
+            perks: user.perks,
+            perkPoints: user.perkPoints,
+            claimedMilestones: user.claimedMilestones,
         });
     } catch (error) {
         console.error('Error fetching account data:', error.message);
@@ -1210,6 +1212,85 @@ app.get('/shop/spells', async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch shop spells.' });
     }
 });
+
+app.post('/shop/gacha', async (req, res) => {
+    const { userId, seedId, gachaCost } = req.body;
+
+    if (seedId) { // 30% chance
+        try {
+            // Fetch current currency & inventory
+            const [user] = await db.query(
+                `SELECT currency, inventory FROM users WHERE id = ?`,
+                [userId]
+            );
+    
+            if (!user.length) {
+                return res.status(404).json({ error: "User not found." });
+            }
+    
+            let { currency, inventory } = user[0];
+    
+            // Check if user has enough currency
+            if (currency < gachaCost) {
+                return res.status(400).json({ error: "Not enough currency." });
+            }
+    
+            // Deduct gacha cost
+            currency -= gachaCost;
+    
+            // Parse inventory safely
+            let parsedInventory = [];
+            if (inventory) {
+                try {
+                    parsedInventory = JSON.parse(inventory);
+                } catch (error) {
+                    console.error("Error parsing inventory JSON:", error);
+                }
+            }
+    
+            // Fetch the seed details from the `seeds` table
+            const [seedDetails] = await db.query(
+                `SELECT id, name FROM seeds WHERE id = ?`,
+                [seedId]
+            );
+    
+            if (seedDetails.length === 0) {
+                return res.status(404).json({ error: "Seed not found." });
+            }
+    
+            const seed = seedDetails[0];
+    
+            // Check if the seed already exists in the inventory
+            const existingSeedIndex = parsedInventory.findIndex(invItem => invItem.id === seed.id);
+    
+            if (existingSeedIndex !== -1) {
+                // Seed exists, update quantity
+                parsedInventory[existingSeedIndex].quantity += 1;
+            } else {
+                // New seed, add to inventory
+                parsedInventory.push({ id: seed.id, name: seed.name, type: 'seed', quantity: 1 });
+            }
+    
+            // Update user's inventory and currency
+            await db.query(
+                `UPDATE users SET inventory = ?, currency = ? WHERE id = ?`,
+                [JSON.stringify(parsedInventory), currency, userId]
+            );
+    
+            console.log("Updated Inventory:", parsedInventory); // Debugging
+            res.status(200).json({ 
+                message: "Seed added successfully", 
+                inventory: parsedInventory, 
+                currency 
+            });
+    
+        } catch (error) {
+            console.error("Error in gacha function:", error);
+            res.status(500).json({ error: "Internal Server Error" });
+        }
+    }
+    
+})
 
 
 app.post('/spell-shop/buy', async (req, res) => {
@@ -2226,6 +2307,24 @@ app.post('/garden/harvest', async (req, res) => {
     }
 });
 
+app.get('/seeds', async (req, res) => {
+    const { id } = req.params;  // Get the itemId from the request parameter
+
+    try {
+        // Query to fetch the item from the database
+        const results = await db.query('SELECT * FROM seeds');
+
+        if (results.length > 0) {
+            res.json(results[0]);  // Return the item as JSON if found
+        } else {
+            res.status(404).json({ error: 'Seed not found' });  // Item not found
+        }
+    } catch (error) {
+        console.error('Error fetching seed:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 app.get('/seed/:id', async (req, res) => {
     const { id } = req.params;  // Get the itemId from the request parameter
 
@@ -2371,6 +2470,130 @@ app.post('/consume', async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to consume item" });
+    }
+});
+
+app.get("/perks", async (req, res) => {
+    try {
+        const [result] = await db.query("SELECT * FROM perks");
+        console.log(result);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch craftable items" });
+    }
+});
+
+app.get("/perks/:name", async (req, res) => {
+    try {
+        const { name } = req.params;
+        const [result] = await db.query("SELECT * FROM perks WHERE name = ?", [name]);
+
+        if (result.length === 0) {
+            return res.status(404).json({ error: "Perk not found" });
+        }
+
+        res.json(result[0]);
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch perk" });
+    }
+});
+
+app.post('/choose-perk', async (req, res) => {
+    const { userId, perkName, stat, newPerkPoints } = req.body;
+
+    try {
+        // Fetch user's perks
+        const [userRows] = await db.query(`SELECT perks FROM users WHERE id = ?`, [userId]);
+
+        if (userRows.length === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        let perks = JSON.parse(userRows[0].perks || '[]'); // Ensure it's an array
+
+        // Check if the perk already exists
+        if (perks.some(perk => perk.perkName === perkName)) {
+            return res.status(400).json({ error: "Perk already chosen" });
+        }
+
+        // Add new perk with full stat milestone tracking
+        perks.push({ perkName, stat: stat });
+
+        // Update the user's perks in the database
+        await db.query(`UPDATE users SET perks = ?, perkPoints = ? WHERE id = ?`, [JSON.stringify(perks), newPerkPoints, userId]);
+
+        res.json({ message: `Successfully added perk: ${perkName}` });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to save perk" });
+    }
+});
+
+app.post("/claim-perk-point", async (req, res) => {
+    const { userId, stat, milestone } = req.body;
+
+    try {
+        // Fetch current user data
+        const [rows] = await db.query("SELECT perkPoints, claimedMilestones FROM users WHERE id = ?", [userId]);
+
+        if (!rows.length) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        let user = rows[0]; // Extract user data from the first row
+        let currentPerkPoints = parseInt(user.perkPoints, 10) || 0; // Ensure it's a number, default to 0
+        let claimedMilestones = JSON.parse(user.claimedMilestones || "[]");
+
+        // Check if milestone is already claimed
+        if (claimedMilestones.some(m => m.stat === stat && m.milestone === milestone)) {
+            return res.status(400).json({ error: "Milestone already claimed" });
+        }
+
+        // Increment perk points and update claimed milestones
+        claimedMilestones.push({ stat, milestone });
+        const updatedPerkPoints = currentPerkPoints + 1;
+
+        await db.query("UPDATE users SET perkPoints = ?, claimedMilestones = ? WHERE id = ?", [
+            updatedPerkPoints,
+            JSON.stringify(claimedMilestones),
+            userId
+        ]);
+
+        res.json({ message: "Perk point claimed!", perkPoints: updatedPerkPoints, claimedMilestones });
+    } catch (error) {
+        console.error("Error updating perk points:", error);
+        res.status(500).json({ error: "Internal server error" });
+    }
+});
+
+app.post("/remove-perk", async (req, res) => {
+    const { userId, perkName, refundPoints } = req.body;
+
+    try {
+        // Fetch the current perks and perk points
+        const [user] = await db.query(`SELECT perks, perkPoints FROM users WHERE id = ?`, [userId]);
+        
+        if (!user || user.length === 0) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        let userPerks = JSON.parse(user[0].perks);
+        let newPerkPoints = user[0].perkPoints + refundPoints; // Refund points
+
+        // Remove the selected perk
+        userPerks = userPerks.filter(perk => perk.perkName !== perkName);
+
+        // Update the database
+        await db.query(
+            `UPDATE users SET perks = ?, perkPoints = ? WHERE id = ?`,
+            [JSON.stringify(userPerks), newPerkPoints, userId]
+        );
+
+        res.json({ success: true, newPerks: userPerks, newPerkPoints });
+    } catch (error) {
+        console.error("Error removing perk:", error);
+        res.status(500).json({ error: "Internal Server Error" });
     }
 });
 
