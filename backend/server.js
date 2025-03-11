@@ -640,8 +640,13 @@ app.post('/quests/finish', async (req, res) => {
 
 app.get('/quests/daily', async (req, res) => {
     try {
-        // Fetch everything from the daily_quests table
-        const query = `SELECT * FROM daily_quests;`;
+        // Fetch all daily quests along with their corresponding quest data
+        const query = `
+            SELECT dq.*, q.name, q.description, q.difficulty, q.experience_reward, q.item_reward, q.stat_reward
+            FROM daily_quests dq
+            INNER JOIN quests q ON dq.quest_id = q.id;
+        `;
+
         const [results] = await db.query(query);
 
         if (!results || results.length === 0) {
@@ -655,6 +660,7 @@ app.get('/quests/daily', async (req, res) => {
         res.status(500).json({ message: 'Internal Server Error', error: err.message });
     }
 });
+
 
 app.get('/account', async (req, res) => {
     const { userId } = req.query;
