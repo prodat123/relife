@@ -602,55 +602,28 @@ app.post('/quests/finish', async (req, res) => {
     }
 });
 
-// app.get('/quests/daily', async (req, res) => {
-    
-//     const userId = req.query.userId;
-
-
-//     try {
-//         // Set timezone to Pacific Time (PST/PDT)
-//         await db.query("SET time_zone = '-08:00';"); // Pacific Standard Time (PST, UTC-8)
-
-//         // Fetch today's quests
-//         const query = `
-//             SELECT q.id, q.name, q.description, q.difficulty, q.experience_reward, q.item_reward, q.stat_reward
-//             FROM quests q
-//             INNER JOIN daily_quests dq ON q.id = dq.quest_id
-//             WHERE dq.date = CURDATE();
-//         `;
-
-//         const [results] = await db.query(query);
-
-//         // Debug Timezone
-//         const [timeResult] = await db.query("SELECT NOW() AS server_time, CURDATE() AS server_date;");
-//         console.log('Server Time:', timeResult[0]?.server_time);
-//         console.log('Server Date:', timeResult[0]?.server_date);
-
-//         if (!results || results.length === 0) {
-//             console.log('No quests found for today.');
-//             return res.status(404).json({ message: 'No daily quests found' });
-//         }
-
-//         res.json(results);
-//     } catch (err) {
-//         console.error('Error fetching daily quests:', err.message);
-//         res.status(500).json({ message: 'Internal Server Error', error: err.message });
-//     }
-// });
-
 app.get('/quests/daily', async (req, res) => {
     try {
-        // Fetch all daily quests along with their corresponding quest data
+        // Set timezone to Pacific Time (PST/PDT)
+        await db.query("SET time_zone = '-08:00';"); // Pacific Standard Time (PST, UTC-8)
+
+        // Fetch today's quests
         const query = `
-            SELECT dq.*, q.name, q.description, q.difficulty, q.experience_reward, q.item_reward, q.stat_reward
-            FROM daily_quests dq
-            INNER JOIN quests q ON dq.quest_id = q.id;
+            SELECT q.id, q.name, q.description, q.difficulty, q.experience_reward, q.item_reward, q.stat_reward
+            FROM quests q
+            INNER JOIN daily_quests dq ON q.id = dq.quest_id
+            WHERE dq.date = CURDATE();
         `;
 
         const [results] = await db.query(query);
 
+        // Debug Timezone
+        const [timeResult] = await db.query("SELECT NOW() AS server_time, CURDATE() AS server_date;");
+        console.log('Server Time:', timeResult[0]?.server_time);
+        console.log('Server Date:', timeResult[0]?.server_date);
+
         if (!results || results.length === 0) {
-            console.log('No daily quests found.');
+            console.log('No quests found for today.');
             return res.status(404).json({ message: 'No daily quests found' });
         }
 
@@ -660,7 +633,6 @@ app.get('/quests/daily', async (req, res) => {
         res.status(500).json({ message: 'Internal Server Error', error: err.message });
     }
 });
-
 
 app.get('/account', async (req, res) => {
     const { userId } = req.query;
