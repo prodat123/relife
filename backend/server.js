@@ -288,7 +288,7 @@ const checkAndUpdateVows = async () => {
 
 
 
-cron.schedule('* * * * *', async () => { 
+cron.schedule('0 0 * * *', async () => { 
     console.log(`[${new Date().toISOString()}] Running daily quest insertion...`);
     await clearCompletedQuestParticipants();
     await insertDailyQuests();
