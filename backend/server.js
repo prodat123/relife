@@ -441,7 +441,7 @@ app.get('/quests/active', async (req, res) => {
 
 // Fetch completed quests the user has participated in
 app.get('/quests/completed', async (req, res) => {
-    const { userId, currentDate } = req.query;
+    const { userId } = req.query;
 
     // Validate if the user ID is provided
     if (!userId) {
@@ -452,7 +452,7 @@ app.get('/quests/completed', async (req, res) => {
 
         
         // Get the current date (formatted as 'YYYY-MM-DD')
-        // const currentDate = new Date().toLocaleDateString('en-CA');  // 'YYYY-MM-DD'
+        const currentDate = new Date().toLocaleDateString('en-CA');  // 'YYYY-MM-DD'
 
         // Query to fetch completed quests for the given user where completed = true and completed_at is today
         const [completedQuests] = await db.query(
@@ -548,51 +548,51 @@ app.post('/quests/finish', async (req, res) => {
 
         // Update user's inventory if an item reward exists
         // Update user's inventory if an item reward exists (30% chance)
-        if (itemReward) { // 30% chance
-            // Fetch current inventory
-            const [user] = await db.query(
-                `SELECT inventory FROM users WHERE id = ?`,
-                [userId]
-            );
-            let inventory = [];
+        // if (itemReward) { // 30% chance
+        //     // Fetch current inventory
+        //     const [user] = await db.query(
+        //         `SELECT inventory FROM users WHERE id = ?`,
+        //         [userId]
+        //     );
+        //     let inventory = [];
 
-            try {
-                inventory = JSON.parse(user[0].inventory) || []; // Parse inventory safely
-            } catch (error) {
-                console.error("Error parsing inventory JSON:", error);
-                inventory = []; // Default to empty array if parsing fails
-            }
+        //     try {
+        //         inventory = JSON.parse(user[0].inventory) || []; // Parse inventory safely
+        //     } catch (error) {
+        //         console.error("Error parsing inventory JSON:", error);
+        //         inventory = []; // Default to empty array if parsing fails
+        //     }
 
-            // Fetch the item details from the `items` table
-            const [itemDetails] = await db.query(
-                `SELECT id, name FROM items WHERE id = ?`,
-                [itemReward]
-            );
-            if (itemDetails.length === 0) {
-                return res.status(404).json({ error: 'Reward item not found.' });
-            }
+        //     // Fetch the item details from the `items` table
+        //     const [itemDetails] = await db.query(
+        //         `SELECT id, name FROM items WHERE id = ?`,
+        //         [itemReward]
+        //     );
+        //     if (itemDetails.length === 0) {
+        //         return res.status(404).json({ error: 'Reward item not found.' });
+        //     }
 
-            const item = itemDetails[0];
+        //     const item = itemDetails[0];
 
-            // Check if the item already exists in the inventory
-            let inventoryItem = inventory.find(invItem => invItem.id === item.id);
+        //     // Check if the item already exists in the inventory
+        //     let inventoryItem = inventory.find(invItem => invItem.id === item.id);
 
-            if (inventoryItem) {
-                inventoryItem.quantity = (inventoryItem.quantity || 0) + 1; // Ensure quantity exists before incrementing
-            } else {
-                inventory.push({ id: item.id, name: item.name, quantity: 1 }); // Add new item with quantity 1
-            }
+        //     if (inventoryItem) {
+        //         inventoryItem.quantity = (inventoryItem.quantity || 0) + 1; // Ensure quantity exists before incrementing
+        //     } else {
+        //         inventory.push({ id: item.id, name: item.name, quantity: 1 }); // Add new item with quantity 1
+        //     }
 
-            // Save the updated inventory
-            await db.query(
-                `UPDATE users
-                SET inventory = ?
-                WHERE id = ?`,
-                [JSON.stringify(inventory), userId]
-            );
+        //     // Save the updated inventory
+        //     await db.query(
+        //         `UPDATE users
+        //         SET inventory = ?
+        //         WHERE id = ?`,
+        //         [JSON.stringify(inventory), userId]
+        //     );
 
-            console.log("Updated Inventory:", inventory); // Debugging: Check what is being saved
-        }
+        //     console.log("Updated Inventory:", inventory); // Debugging: Check what is being saved
+        // }
 
 
         res.json({ success: true, message: 'Quest marked as finished and rewards applied.' });
