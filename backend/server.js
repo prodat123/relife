@@ -288,7 +288,7 @@ const checkAndUpdateVows = async () => {
 
 
 
-cron.schedule('0 0 * * *', async () => { 
+cron.schedule('* * * * *', async () => { 
     console.log(`[${new Date().toISOString()}] Running daily quest insertion...`);
     await clearCompletedQuestParticipants();
     await insertDailyQuests();
@@ -298,18 +298,18 @@ cron.schedule('0 0 * * *', async () => {
     timezone: 'America/Los_Angeles' // California Timezone
 });
 
-cron.schedule('0 */6 * * *', async () => {
-    try {
-        console.log('Resetting discounts and spin timestamps...');
-        await db.query(
-            `UPDATE users
-             SET discount = NULL`
-        );
-        console.log('Discounts and timestamps reset successfully.');
-    } catch (err) {
-        console.error('Error resetting discounts:', err.message, err.stack);
-    }
-});
+// cron.schedule('0 */6 * * *', async () => {
+//     try {
+//         console.log('Resetting discounts and spin timestamps...');
+//         await db.query(
+//             `UPDATE users
+//              SET discount = NULL`
+//         );
+//         console.log('Discounts and timestamps reset successfully.');
+//     } catch (err) {
+//         console.error('Error resetting discounts:', err.message, err.stack);
+//     }
+// });
 
 // Get quests by type
 app.get('/quests', async (req, res) => {
