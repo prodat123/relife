@@ -354,16 +354,21 @@ app.post('/quests/select', async (req, res) => {
             [questId, userId]
         );
 
-        // If user is already in the participants table, update progress if needed
+        const now = new Date();
+        const expiredAt = new Date(now.getTime() + 28800 * 1000);
+
+        // Calculate expired_at (8 hours after joined_at)
+        // const expiredAt = new Date(new Date(currentDate).getTime() + 8 * 60 * 60 * 1000);
+
         if (existingParticipant.length > 0) {
             if (existingParticipant[0].progress === 'Started') {
                 return res.status(200).json({ message: 'Quest already started by this user' });
             }
 
-            // Update progress to 'Started' and joined_at if not already done
+            // Update progress to 'Started' and set joined_at & expired_at
             await db.query(
-                'UPDATE quest_participants SET progress = ?, joined_at = ?, completed = ? WHERE id = ?',
-                ['Started', currentDate, false, existingParticipant[0].id]
+                'UPDATE quest_participants SET progress = ?, joined_at = ?, expired_at = ?, completed = ? WHERE id = ?',
+                ['Started', currentDate, expiredAt, false, existingParticipant[0].id]
             );
 
             return res.status(200).json({ message: 'Quest progress updated to Started' });
@@ -371,8 +376,8 @@ app.post('/quests/select', async (req, res) => {
 
         // If user is not a participant, add them to the quest
         await db.query(
-            'INSERT INTO quest_participants (quest_id, user_id, progress, completed, joined_at, completed_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [questId, userId, 'Started', false, currentDate, null]
+            'INSERT INTO quest_participants (quest_id, user_id, progress, completed, joined_at, expired_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [questId, userId, 'Started', false, currentDate, expiredAt, null]
         );
 
         res.status(201).json({ message: 'User added as participant with progress Started' });
@@ -382,6 +387,7 @@ app.post('/quests/select', async (req, res) => {
         res.status(500).json({ error: 'An error occurred while selecting the quest.' });
     }
 });
+
 
 app.post('/quests/remove', async (req, res) => {
     const { questId, userId } = req.body;
@@ -423,21 +429,51 @@ app.get('/quests/active', async (req, res) => {
         return res.status(400).json({ error: 'User ID is required' });
     }
 
+    const now = new Date();
+
     try {
         const [activeQuests] = await db.query(
-            `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, q.* 
+            `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, qp.expired_at, q.* 
              FROM quest_participants qp
              INNER JOIN quests q ON qp.quest_id = q.id
-             WHERE qp.user_id = ? AND qp.completed = false`,
-            [userId]
+             WHERE qp.user_id = ? 
+               AND (qp.completed = 0 OR ? < qp.expired_at)`,
+            [userId, now]
         );
+        
 
+        console.log(activeQuests);
         res.status(200).json(activeQuests);
     } catch (error) {
         console.error('Error fetching active quests:', error);
         res.status(500).json({ error: 'An error occurred while fetching active quests' });
     }
 });
+
+app.get('/quests/filled-slots/:userId', async (req, res) => {
+    const { userId } = req.params;
+
+    const now = new Date();
+
+    if (!userId) {
+        return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    try {
+        // Query to count active quests where expired_at > NOW()
+        const [result] = await db.query(
+            'SELECT COUNT(*) AS activeQuests FROM quest_participants WHERE user_id = ? AND ? < expired_at',
+            [userId, now]
+        );
+
+        res.status(200).json({ activeQuests: result[0].activeQuests });
+
+    } catch (error) {
+        console.error('Error fetching active quests:', error);
+        res.status(500).json({ error: 'An error occurred while retrieving active quests.' });
+    }
+});
+
 
 // Fetch completed quests the user has participated in
 app.get('/quests/completed', async (req, res) => {
@@ -453,7 +489,6 @@ app.get('/quests/completed', async (req, res) => {
         
         // Get the current date (formatted as 'YYYY-MM-DD')
         const currentDate = new Date().toLocaleDateString('en-CA');  // 'YYYY-MM-DD'
-
         // Query to fetch completed quests for the given user where completed = true and completed_at is today
         const [completedQuests] = await db.query(
             `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, q.name, q.description, qp.completed_at 
@@ -462,7 +497,6 @@ app.get('/quests/completed', async (req, res) => {
              WHERE qp.user_id = ? AND qp.completed = 1 AND qp.completed_at = ?`,
             [userId, currentDate]  // Use the currentDate for filtering
         );
-
         // Return the completed quests
         res.status(200).json(completedQuests);
     } catch (error) {
@@ -2592,11 +2626,7 @@ app.post("/remove-perk", async (req, res) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 });
-
-
-
-
-  
+ 
 
 app.listen(3001, () => {
     console.log('✅ Backend running on HTTP at port 3001');
