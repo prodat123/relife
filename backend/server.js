@@ -645,8 +645,7 @@ app.get('/quests/daily', async (req, res) => {
         const query = `
             SELECT q.id, q.name, q.description, q.difficulty, q.experience_reward, q.item_reward, q.stat_reward
             FROM quests q
-            INNER JOIN daily_quests dq ON q.id = dq.quest_id
-            WHERE dq.date = CURDATE();
+            INNER JOIN daily_quests dq ON q.id = dq.quest_id;
         `;
 
         const [results] = await db.query(query);
