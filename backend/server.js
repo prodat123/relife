@@ -507,11 +507,11 @@ app.get('/quests/completed', async (req, res) => {
 });
 
 app.post('/quests/finish', async (req, res) => {
-    const { questId, userId, completedDate } = req.body;
+    const { questId, userId } = req.body;
 
     try {
 
-        const completionDate = completedDate ? completedDate : new Date().toISOString().split('T')[0];
+        const completionDate = new Date().toISOString().split('T')[0];
 
         // Check if the quest is already completed today
         const [existing] = await db.query(
