@@ -429,7 +429,7 @@ app.get('/quests/active', async (req, res) => {
         return res.status(400).json({ error: 'User ID is required' });
     }
 
-    const now = new Date();
+    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
 
     try {
         const [activeQuests] = await db.query(
@@ -453,7 +453,7 @@ app.get('/quests/active', async (req, res) => {
 app.get('/quests/filled-slots/:userId', async (req, res) => {
     const { userId } = req.params;
 
-    const now = new Date();
+    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
 
     if (!userId) {
         return res.status(400).json({ error: 'User ID is required' });
@@ -515,7 +515,7 @@ app.post('/quests/finish', async (req, res) => {
 
         // Check if the quest is already completed today
         const [existing] = await db.query(
-            `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ? AND completed = 1 AND DATE(completed_at) = ?`,
+            `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ? AND completed = 1 AND completed_at = ?`,
             [questId, userId, completionDate]
         );
         if (existing.length > 0) {
