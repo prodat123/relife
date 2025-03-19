@@ -14,10 +14,15 @@ require('dotenv').config();
 
 app.use(bodyParser.json());
 
-app.use(cors({
-    origin: '*',
-    credentials: true
-}));
+const corsOptions = {
+    origin: 'https://relifehabits.com',  // Replace with your frontend domain
+    methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allow specific methods
+    allowedHeaders: ['Content-Type', 'Authorization'], // Allow headers
+    credentials: true,  // Allow cookies (set withCredentials in axios)
+};
+
+// Apply CORS middleware globally
+app.use(cors(corsOptions));
 
 app.use(session({
     secret: process.env.SECRET_KEY,     // Use a secure, random secret in production
