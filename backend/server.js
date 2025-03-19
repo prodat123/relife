@@ -1,5 +1,5 @@
 const express = require('express');
-var session = require('express-session');
+// var session = require('express-session');
 const app = express();
 const bodyParser = require('body-parser');
 const db = require('./db'); // Import the database connection
@@ -27,16 +27,16 @@ app.options('*', cors(corsOptions));  // Enable CORS for OPTIONS requests
 
 app.use(bodyParser.json());
 
-app.use(session({
-    secret: process.env.SECRET_KEY,     // Use a secure, random secret in production
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        secure: true,              // Set to true in production with HTTPS
-        httpOnly: true,             // Prevent client-side JS access
-        maxAge: 8 * 60 * 60 * 1000  // 8 hours
-    }
-}));
+// app.use(session({
+//     secret: process.env.SECRET_KEY,     // Use a secure, random secret in production
+//     resave: false,
+//     saveUninitialized: false,
+//     cookie: {
+//         secure: true,              // Set to true in production with HTTPS
+//         httpOnly: true,             // Prevent client-side JS access
+//         maxAge: 8 * 60 * 60 * 1000  // 8 hours
+//     }
+// }));
 
 
 app.post('/auth/signup', async (req, res) => {
