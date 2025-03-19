@@ -1,5 +1,4 @@
 const express = require('express');
-// var session = require('express-session');
 const app = express();
 const bodyParser = require('body-parser');
 const db = require('./db'); // Import the database connection
@@ -11,33 +10,9 @@ const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
 
 require('dotenv').config();
 
-
-const corsOptions = {
-    origin: 'https://api.relifehabits.com',  
-    methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allow specific methods
-    allowedHeaders: ['Content-Type', 'Authorization'], // Allow headers
-    credentials: true,  // Allow cookies (set withCredentials in axios)
-};
-
-// Apply CORS middleware globally
-app.use(cors());
-
-// // Allow preflight requests
-app.options('*', cors(corsOptions));  // Enable CORS for OPTIONS requests
-
 app.use(bodyParser.json());
 
-// app.use(session({
-//     secret: process.env.SECRET_KEY,     // Use a secure, random secret in production
-//     resave: false,
-//     saveUninitialized: false,
-//     cookie: {
-//         secure: true,              // Set to true in production with HTTPS
-//         httpOnly: true,             // Prevent client-side JS access
-//         maxAge: 8 * 60 * 60 * 1000  // 8 hours
-//     }
-// }));
-
+app.use(cors());
 
 app.post('/auth/signup', async (req, res) => {
     const { username, password, email, age, recaptchaToken } = req.body;
@@ -85,7 +60,6 @@ app.post('/auth/login', async (req, res) => {
             return res.status(400).json({ message: 'User not found' });
         }
 
-        console.log(result[0].id);
         const user = result[0];
 
         // Compare the hashed password
@@ -93,8 +67,6 @@ app.post('/auth/login', async (req, res) => {
         if (!isPasswordValid) {
             return res.status(400).json({ message: 'Invalid credentials' });
         }
-
-        // req.session.userId = user.id;
 
         res.status(200).json({
             message: 'Login successful',
@@ -327,6 +299,19 @@ cron.schedule('0 0 * * *', async () => {
     timezone: 'America/Los_Angeles' // California Timezone
 });
 
+// cron.schedule('0 */6 * * *', async () => {
+//     try {
+//         console.log('Resetting discounts and spin timestamps...');
+//         await db.query(
+//             `UPDATE users
+//              SET discount = NULL`
+//         );
+//         console.log('Discounts and timestamps reset successfully.');
+//     } catch (err) {
+//         console.error('Error resetting discounts:', err.message, err.stack);
+//     }
+// });
+
 // Get quests by type
 app.get('/quests', async (req, res) => {
     try {
@@ -350,13 +335,7 @@ app.get('/quest/:id', async (req, res) => {
 });
 
 app.post('/quests/select', async (req, res) => {
-    const { questId, currentDate } = req.body;
-
-    if (!req.session.userId) {
-        return res.status(401).json({ error: 'Unauthorized: No session found' });
-    }
-
-    const userId = req.session.userId;
+    const { questId, userId, currentDate } = req.body;
 
     if (!questId || !userId) {
         return res.status(400).json({ error: 'Quest ID and User ID are required' });
@@ -531,26 +510,11 @@ app.get('/quests/completed', async (req, res) => {
 });
 
 app.post('/quests/finish', async (req, res) => {
-    const { questId } = req.body;
-
-    if (!req.session.userId) {
-        return res.status(401).json({ error: 'Unauthorized: No session found' });
-    }
-
-    const userId = req.session.userId;
+    const { questId, userId } = req.body;
 
     try {
 
         const completionDate = new Date().toISOString().split('T')[0];
-
-        const [active] = await db.query(
-            `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ?`,
-            [questId, userId]
-        );
-
-        if(active.length === 0){
-            return res.status(400).json({ error: 'Quest is not currently selected' });
-        }
 
         // Check if the quest is already completed today
         const [existing] = await db.query(
@@ -560,8 +524,6 @@ app.post('/quests/finish', async (req, res) => {
         if (existing.length > 0) {
             return res.status(400).json({ error: 'Quest already completed today.' });
         }
-
-        
 
         // Retrieve the quest's rewards (experience, item, and stat rewards)
         const [quest] = await db.query(
@@ -975,6 +937,123 @@ app.get('/items/:itemName', async (req, res) => {
     }
 });
 
+const generateRandomInt = () => {
+    return Math.floor(Math.random() * 1e9); // Generates a random number between 0 and 1 billion
+};
+
+app.post('/level-up-item', async (req, res) => {
+    const { userId, itemId, braveryStat } = req.body;
+
+    // Validate request parameters
+    if (!userId || !itemId || braveryStat === undefined) {
+        return res.status(400).json({ error: 'Invalid request parameters.' });
+    }
+
+    try {
+        // Fetch the item details from the `items` table for the item to be leveled up
+        const [baseItemDetails] = await db.query(
+            `SELECT i.id, i.name, i.stats, i.type, i.image_url, i.description 
+             FROM items i 
+             WHERE i.id = ?`,
+            [itemId]
+        );
+
+        if (baseItemDetails.length === 0) {
+            return res.status(404).json({ error: 'Base item not found.' });
+        }
+
+        const baseItem = baseItemDetails[0]; // Base item details (name, stats, type, image_url, description)
+
+        // Parse base item stats
+        const parsedBaseStats = JSON.parse(baseItem.stats);
+
+        // Fetch the user's inventory to check how many of this item they have
+        const [userDetails] = await db.query(
+            `SELECT inventory FROM users WHERE id = ?`,
+            [userId]
+        );
+
+        if (userDetails.length === 0) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
+        let { inventory } = userDetails[0];
+        inventory = JSON.parse(inventory || '[]'); // Parse inventory array
+
+        // Fetch the names of the items in the user's inventory (we need item names to compare)
+        const itemNamesQuery = `SELECT id, name FROM items WHERE id IN (?)`;
+        const [inventoryItems] = await db.query(itemNamesQuery, [inventory]);
+
+        // Count how many of the same item name the user has in their inventory
+        const itemCount = inventoryItems.filter(item => item.name === baseItem.name).length;
+
+        // If the user doesn't have enough items to upgrade, return an error
+        if (itemCount < 2) {
+            return res.status(400).json({ error: 'You need at least two of the same item to upgrade.' });
+        }
+
+        // Calculate the upgrade stats (including bravery influence)
+        const updatedStats = { ...parsedBaseStats };
+        const statTypes = ['endurance', 'strength', 'bravery', 'intelligence'];
+
+        // Apply bravery stat to each stat type
+        statTypes.forEach(stat => {
+            if (updatedStats[stat] !== undefined) {
+                updatedStats[stat] = updatedStats[stat] * (1 + braveryStat / 100);
+            }
+        });
+
+        // Add special ability if exists in base item and apply the increase
+        if (parsedBaseStats.specialAbility !== undefined) {
+            updatedStats.specialAbility = parsedBaseStats.specialAbility + Math.floor(Math.random() * 5);
+        }
+
+        // Generate a new ID for the leveled-up item
+        const newItemId = generateRandomInt(); // You can use your existing ID generation logic
+
+        // Create the leveled-up item with the new stats and details
+        const newItem = {
+            id: newItemId,
+            name: `${baseItem.name} (Leveled Up)`,
+            stats: JSON.stringify(updatedStats),
+            type: baseItem.type,           // Keep the same type as the original item
+            image_url: baseItem.image_url, // Keep the same image URL as the original item
+            description: baseItem.description // Keep the same description as the original item
+        };
+
+        // Insert the new leveled-up item into the `items` table
+        await db.query(
+            `INSERT INTO items SET ?`,
+            newItem
+        );
+
+        // Remove one of the base items from the user's inventory (as it has been used for upgrading)
+        const updatedInventory = inventory.filter(itemId => itemId !== baseItem.id);
+
+        // Add the new leveled-up item to the user's inventory
+        updatedInventory.push(newItemId);
+
+        // Update the user's inventory in the database
+        await db.query(
+            `UPDATE users 
+             SET inventory = ? 
+             WHERE id = ?`,
+            [JSON.stringify(updatedInventory), userId]
+        );
+
+        res.json({
+            success: true,
+            message: `You have successfully leveled up the item and added it to your inventory.`,
+            updatedInventory,
+            newItem,
+        });
+    } catch (err) {
+        console.error('Error leveling up item:', err.message, err.stack);
+        res.status(500).json({ error: 'Failed to level up item.' });
+    }
+});
+
+
 app.get("/stages", async (req, res) => {
     try {
       const [results] = await db.query("SELECT * FROM stages");
@@ -986,27 +1065,16 @@ app.get("/stages", async (req, res) => {
 });
 
 app.post("/add-currency", async (req, res) => {
-    const { reward } = req.body;
-
-    if (!req.session.userId) {
-        return res.status(401).json({ error: 'Unauthorized: No session found' });
-    }
-
-    const uid = req.session.userId;
-
+    const { uid, reward } = req.body;
 
     // Check for missing parameters
-    if (reward === undefined) {
+    if (uid === undefined || reward === undefined) {
         return res.status(400).json({ error: "Missing parameters." });
     }
 
     // If reward is 0, skip the update and respond with a success message
     if (reward === 0) {
         return res.status(200).json({ message: "No currency added as reward is 0." });
-    }
-
-    if (typeof reward !== 'number' || reward <= 0 || reward > 100000) {
-        return res.status(400).json({ error: 'Invalid amount' });
     }
 
     try {
@@ -2871,6 +2939,12 @@ app.get('/guild-quests', async (req, res) => {
     }
 })
 
+
+
+
+
+
+ 
 
 app.listen(3001, () => {
     console.log('✅ Backend running on HTTP at port 3001');
