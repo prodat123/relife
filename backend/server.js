@@ -1,5 +1,5 @@
 const express = require('express');
-// const session = require('express-session');
+const session = require('express-session');
 const app = express();
 const bodyParser = require('body-parser');
 const db = require('./db'); // Import the database connection
@@ -7,14 +7,31 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
 const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
-const crypto = require('crypto-js');
 
 require('dotenv').config();
 
-
-app.use(cors());
+const corsOptions = {
+    origin: 'https://relifehabits.com',   // Your frontend URL
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,  // Allow cookies/sessions
+};
 
 app.use(bodyParser.json());
+
+app.use(cors(corsOptions));
+
+app.use(session({
+    secret: process.env.SECRET_KEY,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: true,
+        httpOnly: true,
+        maxAge: 8 * 60 * 60 * 1000  // 8 hours
+    }
+}));
+
 // app.use(bodyParser.urlencoded({ extended: true }));
 
 // app.use(session({
