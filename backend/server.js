@@ -15,7 +15,7 @@ require('dotenv').config();
 app.use(bodyParser.json());
 
 app.use(cors({
-    origin: 'https://relifehabits.com/*',
+    origin: '*',
     credentials: true
 }));
 
@@ -24,7 +24,7 @@ app.use(session({
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: false,              // Set to true in production with HTTPS
+        secure: true,              // Set to true in production with HTTPS
         httpOnly: true,             // Prevent client-side JS access
         maxAge: 8 * 60 * 60 * 1000  // 8 hours
     }
