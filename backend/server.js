@@ -19,6 +19,8 @@ app.use(cors({
     credentials: true
 }));
 
+app.options('*', cors());  // Respond to OPTIONS requests globally
+
 app.use(session({
     secret: process.env.SECRET_KEY,     // Use a secure, random secret in production
     resave: false,
