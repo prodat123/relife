@@ -1,18 +1,35 @@
 const express = require('express');
 const app = express();
+const session = require('express-session');
 const bodyParser = require('body-parser');
 const db = require('./db'); // Import the database connection
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
 const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
+const crypto = require('crypto')
 
 
 require('dotenv').config();
 
 app.use(bodyParser.json());
 
-app.use(cors());
+app.use(cors({
+    origin: 'http://localhost:3000',
+    credentials: true
+}));
+
+app.use(session({
+    secret: process.env.SECRET_KEY,     // Use a secure, random secret in production
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: false,              // Set to true in production with HTTPS
+        httpOnly: true,             // Prevent client-side JS access
+        maxAge: 8 * 60 * 60 * 1000  // 8 hours
+    }
+}));
+
 
 app.post('/auth/signup', async (req, res) => {
     const { username, password, email, age, recaptchaToken } = req.body;
@@ -60,6 +77,7 @@ app.post('/auth/login', async (req, res) => {
             return res.status(400).json({ message: 'User not found' });
         }
 
+        console.log(result[0].id);
         const user = result[0];
 
         // Compare the hashed password
@@ -67,6 +85,8 @@ app.post('/auth/login', async (req, res) => {
         if (!isPasswordValid) {
             return res.status(400).json({ message: 'Invalid credentials' });
         }
+
+        req.session.userId = user.id;
 
         res.status(200).json({
             message: 'Login successful',
@@ -138,77 +158,78 @@ const insertDailyQuests = async () => {
             SELECT DISTINCT id
             FROM (
                 -- Difficulty 1-5 (Existing)
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery1
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery1
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery2
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery2
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery3
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery3
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery4
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery4
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 1 ORDER BY RAND() LIMIT 2) AS subquery5
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 1 ORDER BY RAND() LIMIT 2) AS subquery5
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery6
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery6
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery7
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery7
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery8
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery8
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery9
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery9
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty = 2 ORDER BY RAND() LIMIT 2) AS subquery10
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 2 ORDER BY RAND() LIMIT 2) AS subquery10
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery11
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery11
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery12
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery12
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery13
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery13
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery14
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery14
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (3,4,5) ORDER BY RAND() LIMIT 6) AS subquery15
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (3,4,5) ORDER BY RAND() LIMIT 6) AS subquery15
 
                 -- Difficulty 6-8
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery16
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery16
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery17
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery17
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery18
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery18
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery19
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery19
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (6,7,8) ORDER BY RAND() LIMIT 6) AS subquery20
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (6,7,8) ORDER BY RAND() LIMIT 6) AS subquery20
 
                 -- Difficulty 9-10
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery21
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery21
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery22
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery22
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery23
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery23
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery24
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery24
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (9,10) ORDER BY RAND() LIMIT 8) AS subquery25
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (9,10) ORDER BY RAND() LIMIT 8) AS subquery25
 
                 -- Difficulty 11-12 (Most difficult, select the most challenging quests)
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery26
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery26
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery27
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery27
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery28
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery28
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery29
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery29
                 UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE difficulty IN (11,12) ORDER BY RAND() LIMIT 10) AS subquery30
+                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (11,12) ORDER BY RAND() LIMIT 10) AS subquery30
             ) AS selected_quests
         ) AS final_quests
         WHERE id NOT IN (
             SELECT quest_id FROM daily_quests WHERE date = CURDATE()
         );
     `;
+
 
 
     try {
@@ -247,7 +268,7 @@ const checkAndUpdateVows = async () => {
 
         for (const vow of vows) {
             const vowDeadline = new Date(vow.deadline);
-            vowDeadline.setDate(vowDeadline.getDate() + 1); // Add 1 day to match moment.js behavior
+            vowDeadline.setDate(vowDeadline.getDate()); // Add 1 day to match moment.js behavior
 
             // Convert to YYYY-MM-DD format for comparison
             const vowDeadlineFormatted = vowDeadline.toISOString().split('T')[0];
@@ -298,19 +319,6 @@ cron.schedule('0 0 * * *', async () => {
     timezone: 'America/Los_Angeles' // California Timezone
 });
 
-// cron.schedule('0 */6 * * *', async () => {
-//     try {
-//         console.log('Resetting discounts and spin timestamps...');
-//         await db.query(
-//             `UPDATE users
-//              SET discount = NULL`
-//         );
-//         console.log('Discounts and timestamps reset successfully.');
-//     } catch (err) {
-//         console.error('Error resetting discounts:', err.message, err.stack);
-//     }
-// });
-
 // Get quests by type
 app.get('/quests', async (req, res) => {
     try {
@@ -334,7 +342,13 @@ app.get('/quest/:id', async (req, res) => {
 });
 
 app.post('/quests/select', async (req, res) => {
-    const { questId, userId, currentDate } = req.body;
+    const { questId, currentDate } = req.body;
+
+    if (!req.session.userId) {
+        return res.status(401).json({ error: 'Unauthorized: No session found' });
+    }
+
+    const userId = req.session.userId;
 
     if (!questId || !userId) {
         return res.status(400).json({ error: 'Quest ID and User ID are required' });
@@ -392,6 +406,7 @@ app.post('/quests/select', async (req, res) => {
 app.post('/quests/remove', async (req, res) => {
     const { questId, userId } = req.body;
 
+    // const decryptedUserId = decryptUserId(userId);
     if (!questId || !userId) {
         return res.status(400).json({ error: 'Quest ID and User ID are required' });
     }
@@ -424,6 +439,7 @@ app.post('/quests/remove', async (req, res) => {
 // Fetch quests the user is participating in
 app.get('/quests/active', async (req, res) => {
     const { userId } = req.query;
+    // const decryptedUserId = decryptUserId(userId);
 
     if (!userId) {
         return res.status(400).json({ error: 'User ID is required' });
@@ -507,11 +523,26 @@ app.get('/quests/completed', async (req, res) => {
 });
 
 app.post('/quests/finish', async (req, res) => {
-    const { questId, userId } = req.body;
+    const { questId } = req.body;
+
+    if (!req.session.userId) {
+        return res.status(401).json({ error: 'Unauthorized: No session found' });
+    }
+
+    const userId = req.session.userId;
 
     try {
 
         const completionDate = new Date().toISOString().split('T')[0];
+
+        const [active] = await db.query(
+            `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ?`,
+            [questId, userId]
+        );
+
+        if(active.length === 0){
+            return res.status(400).json({ error: 'Quest is not currently selected' });
+        }
 
         // Check if the quest is already completed today
         const [existing] = await db.query(
@@ -521,6 +552,8 @@ app.post('/quests/finish', async (req, res) => {
         if (existing.length > 0) {
             return res.status(400).json({ error: 'Quest already completed today.' });
         }
+
+        
 
         // Retrieve the quest's rewards (experience, item, and stat rewards)
         const [quest] = await db.query(
@@ -725,6 +758,7 @@ app.get('/account', async (req, res) => {
             perks: user.perks,
             perkPoints: user.perkPoints,
             claimedMilestones: user.claimedMilestones,
+            guild: user.guild,
         });
     } catch (error) {
         console.error('Error fetching account data:', error.message);
@@ -933,123 +967,6 @@ app.get('/items/:itemName', async (req, res) => {
     }
 });
 
-const generateRandomInt = () => {
-    return Math.floor(Math.random() * 1e9); // Generates a random number between 0 and 1 billion
-};
-
-app.post('/level-up-item', async (req, res) => {
-    const { userId, itemId, braveryStat } = req.body;
-
-    // Validate request parameters
-    if (!userId || !itemId || braveryStat === undefined) {
-        return res.status(400).json({ error: 'Invalid request parameters.' });
-    }
-
-    try {
-        // Fetch the item details from the `items` table for the item to be leveled up
-        const [baseItemDetails] = await db.query(
-            `SELECT i.id, i.name, i.stats, i.type, i.image_url, i.description 
-             FROM items i 
-             WHERE i.id = ?`,
-            [itemId]
-        );
-
-        if (baseItemDetails.length === 0) {
-            return res.status(404).json({ error: 'Base item not found.' });
-        }
-
-        const baseItem = baseItemDetails[0]; // Base item details (name, stats, type, image_url, description)
-
-        // Parse base item stats
-        const parsedBaseStats = JSON.parse(baseItem.stats);
-
-        // Fetch the user's inventory to check how many of this item they have
-        const [userDetails] = await db.query(
-            `SELECT inventory FROM users WHERE id = ?`,
-            [userId]
-        );
-
-        if (userDetails.length === 0) {
-            return res.status(404).json({ error: 'User not found.' });
-        }
-
-        let { inventory } = userDetails[0];
-        inventory = JSON.parse(inventory || '[]'); // Parse inventory array
-
-        // Fetch the names of the items in the user's inventory (we need item names to compare)
-        const itemNamesQuery = `SELECT id, name FROM items WHERE id IN (?)`;
-        const [inventoryItems] = await db.query(itemNamesQuery, [inventory]);
-
-        // Count how many of the same item name the user has in their inventory
-        const itemCount = inventoryItems.filter(item => item.name === baseItem.name).length;
-
-        // If the user doesn't have enough items to upgrade, return an error
-        if (itemCount < 2) {
-            return res.status(400).json({ error: 'You need at least two of the same item to upgrade.' });
-        }
-
-        // Calculate the upgrade stats (including bravery influence)
-        const updatedStats = { ...parsedBaseStats };
-        const statTypes = ['endurance', 'strength', 'bravery', 'intelligence'];
-
-        // Apply bravery stat to each stat type
-        statTypes.forEach(stat => {
-            if (updatedStats[stat] !== undefined) {
-                updatedStats[stat] = updatedStats[stat] * (1 + braveryStat / 100);
-            }
-        });
-
-        // Add special ability if exists in base item and apply the increase
-        if (parsedBaseStats.specialAbility !== undefined) {
-            updatedStats.specialAbility = parsedBaseStats.specialAbility + Math.floor(Math.random() * 5);
-        }
-
-        // Generate a new ID for the leveled-up item
-        const newItemId = generateRandomInt(); // You can use your existing ID generation logic
-
-        // Create the leveled-up item with the new stats and details
-        const newItem = {
-            id: newItemId,
-            name: `${baseItem.name} (Leveled Up)`,
-            stats: JSON.stringify(updatedStats),
-            type: baseItem.type,           // Keep the same type as the original item
-            image_url: baseItem.image_url, // Keep the same image URL as the original item
-            description: baseItem.description // Keep the same description as the original item
-        };
-
-        // Insert the new leveled-up item into the `items` table
-        await db.query(
-            `INSERT INTO items SET ?`,
-            newItem
-        );
-
-        // Remove one of the base items from the user's inventory (as it has been used for upgrading)
-        const updatedInventory = inventory.filter(itemId => itemId !== baseItem.id);
-
-        // Add the new leveled-up item to the user's inventory
-        updatedInventory.push(newItemId);
-
-        // Update the user's inventory in the database
-        await db.query(
-            `UPDATE users 
-             SET inventory = ? 
-             WHERE id = ?`,
-            [JSON.stringify(updatedInventory), userId]
-        );
-
-        res.json({
-            success: true,
-            message: `You have successfully leveled up the item and added it to your inventory.`,
-            updatedInventory,
-            newItem,
-        });
-    } catch (err) {
-        console.error('Error leveling up item:', err.message, err.stack);
-        res.status(500).json({ error: 'Failed to level up item.' });
-    }
-});
-
-
 app.get("/stages", async (req, res) => {
     try {
       const [results] = await db.query("SELECT * FROM stages");
@@ -1061,16 +978,27 @@ app.get("/stages", async (req, res) => {
 });
 
 app.post("/add-currency", async (req, res) => {
-    const { uid, reward } = req.body;
+    const { reward } = req.body;
+
+    if (!req.session.userId) {
+        return res.status(401).json({ error: 'Unauthorized: No session found' });
+    }
+
+    const uid = req.session.userId;
+
 
     // Check for missing parameters
-    if (uid === undefined || reward === undefined) {
+    if (reward === undefined) {
         return res.status(400).json({ error: "Missing parameters." });
     }
 
     // If reward is 0, skip the update and respond with a success message
     if (reward === 0) {
         return res.status(200).json({ message: "No currency added as reward is 0." });
+    }
+
+    if (typeof reward !== 'number' || reward <= 0 || reward > 100000) {
+        return res.status(400).json({ error: 'Invalid amount' });
     }
 
     try {
@@ -2505,7 +2433,6 @@ app.post('/consume', async (req, res) => {
 app.get("/perks", async (req, res) => {
     try {
         const [result] = await db.query("SELECT * FROM perks");
-        console.log(result);
         res.json(result);
     } catch (error) {
         res.status(500).json({ error: "Failed to fetch craftable items" });
@@ -2625,6 +2552,322 @@ app.post("/remove-perk", async (req, res) => {
         res.status(500).json({ error: "Internal Server Error" });
     }
 });
+
+app.get("/guilds", async (req, res) => {
+    try {
+        const [result] = await db.query("SELECT * FROM guilds");
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch craftable items" });
+    }
+});
+
+app.get("/user-guild", async (req, res) => {
+    try {
+        const { name, userId } = req.query; // Get both the guild name and userId from the query parameters
+        
+        if (!name || !userId) {
+            return res.status(400).json({ error: "Guild name and user ID are required" });
+        }
+
+        // Query to fetch the guild by name
+        const [result] = await db.query("SELECT * FROM guilds WHERE name = ?", [name]);
+
+        if (result.length === 0) {
+            return res.status(404).json({ error: "Guild not found" });
+        }
+
+        // Parse the members array from the database result
+        const members = JSON.parse(result[0].members);
+
+        // Check if the user is a member of the guild
+        const isMember = members.some(member => Number(member.userId) === Number(userId));
+
+        if (!isMember) {
+            return res.status(403).json({ error: "User is not a member of this guild" });
+        }
+
+        res.json(result[0]); // Return the guild details
+    } catch (error) {
+        console.error("Error fetching guild:", error);
+        res.status(500).json({ error: "Failed to fetch guild" });
+    }
+});
+
+app.post('/create-guild', async (req, res) => {
+    try {
+        const { name, username, description, privacy, created_by } = req.body;
+
+        // Validate required fields
+        if (!name || !description || !privacy || !created_by) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        // Check if the user exists and fetch their currency balance
+        const userCheckQuery = 'SELECT currency FROM users WHERE id = ?';
+        const [userResult] = await db.query(userCheckQuery, [created_by]);
+
+        if (userResult.length === 0) {
+            return res.status(404).json({ error: 'User does not exist' });
+        }
+
+        const userGold = userResult[0].currency;
+
+        // Check if the user has at least 20000 gold
+        if (userGold < 20000) {
+            return res.status(403).json({ error: 'Insufficient gold. You need at least 20000 gold to create a guild.' });
+        }
+
+        // Deduct 20,000 gold from user's balance
+        const newBalance = userGold - 20000;
+        const updateUserCurrencyQuery = 'UPDATE users SET currency = ?, guild = ? WHERE id = ?';
+        await db.query(updateUserCurrencyQuery, [newBalance, name, created_by]);
+
+        // Check if the guild name already exists
+        const guildCountQuery = 'SELECT COUNT(*) AS guildCount FROM guilds WHERE name = ?';
+        const [guildCountResult] = await db.query(guildCountQuery, [name]);
+
+        if (guildCountResult[0].guildCount > 0) {
+            return res.status(403).json({ error: 'This guild name already exists, choose a different name.' });
+        }
+
+        // Prepare members array with the creator as an admin
+        const created_at = new Date();
+        const members = [{ userId: created_by, username: username,  role: "admin" }];
+
+        // Insert new guild into the database
+        const sql = `INSERT INTO guilds (name, description, members, group_quests, created_at, privacy, request_list) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?)`;
+
+        await db.query(sql, [
+            name,
+            description,
+            JSON.stringify(members), // Store members array as JSON
+            JSON.stringify([]), // Empty group_quests
+            created_at,
+            privacy,
+            JSON.stringify([]) // Empty request_list
+        ]);
+
+        res.status(201).json({ message: 'Guild created successfully', newBalance });
+
+    } catch (error) {
+        console.error('Error creating guild:', error);
+        res.status(500).json({ error: 'Failed to create guild' });
+    }
+});
+
+app.post('/join-guild', async (req, res) => {
+    try {
+        const { name, userId, username } = req.body;
+
+        if (!name || !userId || !username) {
+            return res.status(400).json({ error: 'Guild name and userId are required' });
+        }
+
+        // Check if the user exists
+        const userCheckQuery = 'SELECT COUNT(*) AS count FROM users WHERE id = ?';
+        const [userCheckResult] = await db.query(userCheckQuery, [userId]);
+
+        if (userCheckResult[0].count === 0) {
+            return res.status(404).json({ error: 'User does not exist' });
+        }
+
+        // Check if the user is already in another guild
+        const userGuildCheckQuery = 'SELECT guild FROM users WHERE id = ?';
+        const [userGuildResult] = await db.query(userGuildCheckQuery, [userId]);
+
+        if (userGuildResult[0].guild) {
+            return res.status(403).json({ error: 'User is already in another guild' });
+        }
+
+        // Fetch the target guild by name
+        const guildQuery = 'SELECT members, request_list, privacy FROM guilds WHERE name = ?';
+        const [guildResult] = await db.query(guildQuery, [name]);
+
+        if (guildResult.length === 0) {
+            return res.status(404).json({ error: 'Guild not found' });
+        }
+
+        let { members, request_list, privacy } = guildResult[0];
+
+        // Parse JSON fields
+        members = JSON.parse(members);
+        request_list = JSON.parse(request_list);
+
+        // Check if the user is already a member
+        if (members.some(member => member.userId === userId)) {
+            return res.status(400).json({ error: 'User is already a member of this guild' });
+        }
+
+        if (privacy === "public") {
+            // If public, add user immediately
+            members.push({ userId, username: username, role: "member" });
+
+            // Update the guild with new members
+            const updateGuildQuery = 'UPDATE guilds SET members = ? WHERE name = ?';
+            await db.query(updateGuildQuery, [JSON.stringify(members), name]);
+
+            // Update the user's guild column
+            const updateUserQuery = 'UPDATE users SET guild = ? WHERE id = ?';
+            await db.query(updateUserQuery, [name, userId]);
+
+            return res.status(200).json({ message: 'User successfully joined the guild' });
+        } else {
+            // If private, add user to the request list
+            if (!request_list.includes(userId)) {
+                request_list.push({userId, username: username});
+            }
+
+            // Update the guild with the new request list
+            const updateRequestQuery = 'UPDATE guilds SET request_list = ? WHERE name = ?';
+            await db.query(updateRequestQuery, [JSON.stringify(request_list), name]);
+
+            return res.status(200).json({ message: 'Request sent to join the guild' });
+        }
+    } catch (error) {
+        console.error('Error joining guild:', error);
+        res.status(500).json({ error: 'Failed to join the guild' });
+    }
+});
+
+
+app.post('/leave-guild', async (req, res) => {
+    try {
+        const { name, userId } = req.body;
+
+        if (!name || !userId) {
+            return res.status(400).json({ error: 'Guild name and userId are required' });
+        }
+
+        // Fetch guild data
+        const guildQuery = 'SELECT members FROM guilds WHERE name = ?';
+        const [guildResult] = await db.query(guildQuery, [name]);
+
+        if (guildResult.length === 0) {
+            return res.status(404).json({ error: 'Guild not found' });
+        }
+
+        let members = JSON.parse(guildResult[0].members);
+
+        // Check if user is in the guild
+        const userIndex = members.findIndex(member => Number(member.userId) === Number(userId));
+        if (userIndex === -1) {
+            return res.status(400).json({ error: 'User is not a member of this guild' });
+        }
+
+        // Check if the user is an admin and the last admin
+        const isAdmin = members[userIndex].role === "admin";
+        const remainingAdmins = members.filter(member => member.role === "admin" && Number(member.userId) !== Number(userId));
+
+        if (isAdmin && remainingAdmins.length === 0 && members.length > 1) {
+            return res.status(403).json({ error: 'You are the last admin. Assign another admin before leaving.' });
+        }
+
+        // Remove user from members list
+        members.splice(userIndex, 1);
+
+        if (members.length === 0) {
+            // If no members left, delete the guild
+            const deleteGuildQuery = 'DELETE FROM guilds WHERE name = ?';
+            await db.query(deleteGuildQuery, [name]);
+        } else {
+            // Update guild members in database
+            const updateQuery = 'UPDATE guilds SET members = ? WHERE name = ?';
+            await db.query(updateQuery, [JSON.stringify(members), name]);
+        }
+
+        // Remove guild association from user in the users table
+        const updateUserQuery = 'UPDATE users SET guild = NULL WHERE id = ?';
+        await db.query(updateUserQuery, [userId]);
+
+        res.status(200).json({ message: 'User successfully left the guild' });
+
+    } catch (error) {
+        console.error('Error quitting guild:', error);
+        res.status(500).json({ error: 'Failed to quit the guild' });
+    }
+});
+
+app.post('/handle-guild-request', async (req, res) => {
+    try {
+        const { name, userId, username, action } = req.body; // Removed adminId from request body
+
+        if (!name || !userId || !action) {
+            return res.status(400).json({ error: 'Guild name, userId, and action are required' });
+        }
+
+        // Fetch guild data
+        const guildQuery = 'SELECT members, request_list FROM guilds WHERE name = ?';
+        const [guildResult] = await db.query(guildQuery, [name]);
+
+        if (guildResult.length === 0) {
+            return res.status(404).json({ error: 'Guild not found' });
+        }
+
+        let { members, request_list } = guildResult[0];
+        members = JSON.parse(members);
+        request_list = JSON.parse(request_list);
+
+        // Find admin userId from members list
+        const admin = members.find(member => member.role === "admin");
+        if (!admin) {
+            return res.status(403).json({ error: 'No admin found in the guild' });
+        }
+
+        // Find user in request_list (now an array of objects)
+        const requestIndex = request_list.findIndex(request => request.userId === userId);
+        if (requestIndex === -1) {
+            return res.status(400).json({ error: 'User did not request to join this guild' });
+        }
+
+        if (action === "accept") {
+            // Add user to members with default "player" role
+            members.push({ userId, username, role: "player" });
+
+            // Remove user from request list
+            request_list.splice(requestIndex, 1);
+
+            // Update guild name in users table
+            const updateUserGuildQuery = 'UPDATE users SET guild = ? WHERE id = ?';
+            await db.query(updateUserGuildQuery, [name, userId]);
+
+            // Update guild members and request list
+            const updateQuery = 'UPDATE guilds SET members = ?, request_list = ? WHERE name = ?';
+            await db.query(updateQuery, [JSON.stringify(members), JSON.stringify(request_list), name]);
+
+            return res.status(200).json({ message: 'User successfully joined the guild' });
+        } else if (action === "reject") {
+            // Remove user from request list
+            request_list.splice(requestIndex, 1);
+
+            const updateQuery = 'UPDATE guilds SET request_list = ? WHERE name = ?';
+            await db.query(updateQuery, [JSON.stringify(request_list), name]);
+
+            return res.status(200).json({ message: 'Join request rejected' });
+        } else {
+            return res.status(400).json({ error: 'Invalid action. Use "accept" or "reject"' });
+        }
+    } catch (error) {
+        console.error('Error handling guild request:', error);
+        res.status(500).json({ error: 'Failed to process request' });
+    }
+});
+
+app.get('/guild-quests', async (req, res) => {
+    try {
+        const [result] = await db.query("SELECT * FROM guild_quests");
+        res.json(result[0]);
+    } catch (error) {
+        res.status(500).json({ error: "Failed to fetch craftable items" });
+    }
+})
+
+
+
+
+
+
  
 
 app.listen(3001, () => {
