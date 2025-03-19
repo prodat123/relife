@@ -11,7 +11,6 @@ const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
 
 require('dotenv').config();
 
-app.use(bodyParser.json());
 
 const corsOptions = {
     origin: 'https://api.relifehabits.com',  
@@ -26,6 +25,7 @@ app.use(cors());
 // // Allow preflight requests
 app.options('*', cors(corsOptions));  // Enable CORS for OPTIONS requests
 
+app.use(bodyParser.json());
 
 app.use(session({
     secret: process.env.SECRET_KEY,     // Use a secure, random secret in production
