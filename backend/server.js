@@ -24,6 +24,10 @@ const corsOptions = {
 // Apply CORS middleware globally
 app.use(cors(corsOptions));
 
+// Allow preflight requests
+app.options('*', cors(corsOptions));  // Enable CORS for OPTIONS requests
+
+
 app.use(session({
     secret: process.env.SECRET_KEY,     // Use a secure, random secret in production
     resave: false,
