@@ -1,5 +1,5 @@
 const express = require('express');
-const session = require('express-session');
+// const session = require('express-session');
 const app = express();
 const bodyParser = require('body-parser');
 const db = require('./db'); // Import the database connection
@@ -21,16 +21,16 @@ app.use(bodyParser.json());
 
 app.use(cors(corsOptions));
 
-app.use(session({
-    secret: process.env.SECRET_KEY,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        secure: true,
-        httpOnly: true,
-        maxAge: 8 * 60 * 60 * 1000  // 8 hours
-    }
-}));
+// app.use(session({
+//     secret: process.env.SECRET_KEY,
+//     resave: false,
+//     saveUninitialized: false,
+//     cookie: {
+//         secure: true,
+//         httpOnly: true,
+//         maxAge: 8 * 60 * 60 * 1000  // 8 hours
+//     }
+// }));
 
 // app.use(bodyParser.urlencoded({ extended: true }));
 
