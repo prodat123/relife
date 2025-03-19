@@ -11,9 +11,22 @@ const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
 
 require('dotenv').config();
 
-app.use(bodyParser.json());
 
 app.use(cors());
+
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+app.use(session({
+    secret: process.env.SECRET_KEY,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: true,            // Set to true for HTTPS
+        httpOnly: true,
+        maxAge: 8 * 60 * 60 * 1000  // 8 hours
+    }
+}));
 
 app.post('/auth/signup', async (req, res) => {
     const { username, password, email, age, recaptchaToken } = req.body;
