@@ -10,16 +10,16 @@ const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
 
 require('dotenv').config();
 
-const corsOptions = {
-    origin: 'https://relifehabits.com',   // Your frontend URL
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true,  // Allow cookies/sessions
-};
+// const corsOptions = {
+//     origin: 'https://relifehabits.com',   // Your frontend URL
+//     methods: ['GET', 'POST', 'PUT', 'DELETE'],
+//     allowedHeaders: ['Content-Type', 'Authorization'],
+//     credentials: true,  // Allow cookies/sessions
+// };
 
 app.use(bodyParser.json());
 
-app.use(cors(corsOptions));
+app.use(cors());
 
 // app.use(session({
 //     secret: process.env.SECRET_KEY,
