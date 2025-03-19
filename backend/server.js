@@ -14,10 +14,13 @@ require('dotenv').config();
 
 app.use(bodyParser.json());
 
-app.use(cors());
+app.use(cors({
+    origin: 'https://api.relifehabits.com',
+    credentials: true
+}));
 
 app.use(session({
-    secret: 'fjksf8wuehfiubsdfuuwe8',     // Use a secure, random secret in production
+    secret: process.env.SECRET_KEY,     // Use a secure, random secret in production
     resave: false,
     saveUninitialized: false,
     cookie: {
