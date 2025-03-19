@@ -15,7 +15,7 @@ require('dotenv').config();
 app.use(bodyParser.json());
 
 app.use(cors({
-    origin: 'https://api.relifehabits.com',
+    origin: 'https://relifehabits.com',
     credentials: true
 }));
 
