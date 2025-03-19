@@ -1,6 +1,5 @@
 const express = require('express');
 const app = express();
-const session = require('express-session');
 const bodyParser = require('body-parser');
 const db = require('./db'); // Import the database connection
 const cors = require('cors');
@@ -14,7 +13,7 @@ require('dotenv').config();
 app.use(bodyParser.json());
 
 const corsOptions = {
-    origin: 'https://relifehabits.com',  // Replace with your frontend domain
+    origin: 'https://api.relifehabits.com',  
     methods: ['GET', 'POST', 'PUT', 'DELETE'], // Allow specific methods
     allowedHeaders: ['Content-Type', 'Authorization'], // Allow headers
     credentials: true,  // Allow cookies (set withCredentials in axios)
@@ -27,16 +26,16 @@ app.use(cors());
 app.options('*', cors(corsOptions));  // Enable CORS for OPTIONS requests
 
 
-app.use(session({
-    secret: process.env.SECRET_KEY,     // Use a secure, random secret in production
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        secure: true,              // Set to true in production with HTTPS
-        httpOnly: true,             // Prevent client-side JS access
-        maxAge: 8 * 60 * 60 * 1000  // 8 hours
-    }
-}));
+// app.use(session({
+//     secret: process.env.SECRET_KEY,     // Use a secure, random secret in production
+//     resave: false,
+//     saveUninitialized: false,
+//     cookie: {
+//         secure: true,              // Set to true in production with HTTPS
+//         httpOnly: true,             // Prevent client-side JS access
+//         maxAge: 8 * 60 * 60 * 1000  // 8 hours
+//     }
+// }));
 
 
 app.post('/auth/signup', async (req, res) => {
@@ -2871,12 +2870,6 @@ app.get('/guild-quests', async (req, res) => {
     }
 })
 
-
-
-
-
-
- 
 
 app.listen(3001, () => {
     console.log('✅ Backend running on HTTP at port 3001');
