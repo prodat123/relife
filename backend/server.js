@@ -22,22 +22,22 @@ const corsOptions = {
 };
 
 // Apply CORS middleware globally
-app.use(cors(corsOptions));
+app.use(cors());
 
-// Allow preflight requests
-app.options('*', cors(corsOptions));  // Enable CORS for OPTIONS requests
+// // Allow preflight requests
+// app.options('*', cors(corsOptions));  // Enable CORS for OPTIONS requests
 
 
-app.use(session({
-    secret: process.env.SECRET_KEY,     // Use a secure, random secret in production
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        secure: true,              // Set to true in production with HTTPS
-        httpOnly: true,             // Prevent client-side JS access
-        maxAge: 8 * 60 * 60 * 1000  // 8 hours
-    }
-}));
+// app.use(session({
+//     secret: process.env.SECRET_KEY,     // Use a secure, random secret in production
+//     resave: false,
+//     saveUninitialized: false,
+//     cookie: {
+//         secure: true,              // Set to true in production with HTTPS
+//         httpOnly: true,             // Prevent client-side JS access
+//         maxAge: 8 * 60 * 60 * 1000  // 8 hours
+//     }
+// }));
 
 
 app.post('/auth/signup', async (req, res) => {
@@ -95,7 +95,7 @@ app.post('/auth/login', async (req, res) => {
             return res.status(400).json({ message: 'Invalid credentials' });
         }
 
-        req.session.userId = user.id;
+        // req.session.userId = user.id;
 
         res.status(200).json({
             message: 'Login successful',
