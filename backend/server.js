@@ -7,7 +7,6 @@ const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
 const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
-const crypto = require('crypto')
 
 
 require('dotenv').config();
