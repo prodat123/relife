@@ -373,42 +373,53 @@ app.post('/quests/select', async (req, res) => {
     }
 
     try {
-        // Check if the user exists in the users table
+        // Check if the user exists
         const [userExists] = await db.query('SELECT id FROM users WHERE id = ?', [userId]);
-
         if (userExists.length === 0) {
             return res.status(400).json({ error: 'User does not exist' });
         }
 
-        // Check if the user is already in the participants table for this quest
+        // Check active quests
+        const now = new Date();
+        const [activeQuests] = await db.query(`
+            SELECT COUNT(*) AS activeCount 
+            FROM quest_participants 
+            WHERE user_id = ? AND expired_at > ?
+        `, [userId, now]);
+
+        if (activeQuests[0].activeCount >= 8) {
+            return res.status(400).json({ error: 'You already have 8 active quests' });
+        }
+
+        // Check if the user is already a participant in this quest
         const [existingParticipant] = await db.query(
             'SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ?',
             [questId, userId]
         );
 
-        const now = new Date();
-        const expiredAt = new Date(now.getTime() + 28800 * 1000);
-
-        // Calculate expired_at (8 hours after joined_at)
-        // const expiredAt = new Date(new Date(currentDate).getTime() + 8 * 60 * 60 * 1000);
+        const expiredAt = new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 hours later
 
         if (existingParticipant.length > 0) {
             if (existingParticipant[0].progress === 'Started') {
                 return res.status(200).json({ message: 'Quest already started by this user' });
             }
 
-            // Update progress to 'Started' and set joined_at & expired_at
+            // Update progress to 'Started' and set timestamps
             await db.query(
-                'UPDATE quest_participants SET progress = ?, joined_at = ?, expired_at = ?, completed = ? WHERE id = ?',
+                `UPDATE quest_participants 
+                 SET progress = ?, joined_at = ?, expired_at = ?, completed = ? 
+                 WHERE id = ?`,
                 ['Started', currentDate, expiredAt, false, existingParticipant[0].id]
             );
 
             return res.status(200).json({ message: 'Quest progress updated to Started' });
         }
 
-        // If user is not a participant, add them to the quest
+        // Add the user as a new participant
         await db.query(
-            'INSERT INTO quest_participants (quest_id, user_id, progress, completed, joined_at, expired_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            `INSERT INTO quest_participants 
+             (quest_id, user_id, progress, completed, joined_at, expired_at, completed_at) 
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [questId, userId, 'Started', false, currentDate, expiredAt, null]
         );
 
