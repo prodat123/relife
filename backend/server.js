@@ -1107,10 +1107,10 @@ app.get("/stages", async (req, res) => {
 });
 
 app.post("/add-currency", async (req, res) => {
-    const { uid, reward } = req.body;
+    const { id, reward } = req.body; // 'id' is now the tower id, not uid
 
     // Check for missing parameters
-    if (uid === undefined || reward === undefined) {
+    if (id === undefined || reward === undefined) {
         return res.status(400).json({ error: "Missing parameters." });
     }
 
@@ -1120,11 +1120,27 @@ app.post("/add-currency", async (req, res) => {
     }
 
     try {
-        const query = "UPDATE users SET currency = currency + ? WHERE id = ?";
-        const [result] = await db.query(query, [reward, uid]);
+        // First, find the userId associated with the given tower id
+        const query = "SELECT userId FROM tower_players WHERE id = ?";
+        const [result] = await db.query(query, [id]);
 
-        if (result.affectedRows > 0) {
-            return res.status(200).json({ message: "Currency added successfully!" });
+        if (result.length === 0) {
+            // If no tower with the given id is found, return an error
+            return res.status(404).json({ error: "Tower not found." });
+        }
+
+        const userId = result[0].userId;
+
+        // Now, update the currency of the user with the corresponding userId
+        const updateQuery = "UPDATE users SET currency = currency + ? WHERE id = ?";
+        const [updateResult] = await db.query(updateQuery, [reward, userId]);
+
+        if (updateResult.affectedRows > 0) {
+            // After updating currency, delete the row from tower_players
+            const deleteQuery = "DELETE FROM tower_players WHERE id = ?";
+            await db.query(deleteQuery, [id]);
+
+            return res.status(200).json({ message: "Currency added successfully and tower player removed!" });
         } else {
             return res.status(404).json({ error: "User not found." });
         }
@@ -1133,6 +1149,9 @@ app.post("/add-currency", async (req, res) => {
         return res.status(500).json({ error: "Internal server error." });
     }
 });
+
+
+
 
 app.get('/shop/items', async (req, res) => {
     try {
@@ -1461,63 +1480,106 @@ app.post('/spell-shop/buy', async (req, res) => {
 
 
 
-app.post('/spin-wheel', async (req, res) => {
-    const { userId, intelligence } = req.body;
+// app.post('/spin-wheel', async (req, res) => {
+//     const { userId, intelligence } = req.body;
 
-    if (!userId || intelligence === undefined) {
-        return res.status(400).json({ error: 'Invalid request parameters.' });
+//     if (!userId || intelligence === undefined) {
+//         return res.status(400).json({ error: 'Invalid request parameters.' });
+//     }
+
+//     try {
+//         // Fetch user details including last_spin timestamp
+//         const [user] = await db.query(
+//             `SELECT last_spin FROM users WHERE id = ?`,
+//             [userId]
+//         );
+
+//         if (user.length === 0) {
+//             return res.status(404).json({ error: 'User not found.' });
+//         }
+
+//         const { last_spin } = user[0];
+//         const now = new Date();
+
+//         // Check cooldown period (6 hours)
+//         if (last_spin) {
+//             const lastSpinDate = new Date(last_spin);
+//             const hoursSinceLastSpin = (now - lastSpinDate) / (1000 * 60 * 60);
+
+//             if (hoursSinceLastSpin < 6) {
+//                 const timeLeft = 6 - hoursSinceLastSpin;
+//                 return res.status(400).json({
+//                     error: `You can spin the wheel again in ${Math.ceil(timeLeft)} hours.`,
+//                 });
+//             }
+//         }
+
+//         // Calculate the discount
+//         const baseDiscount = Math.floor(Math.random() * 21); // Random discount 0-20%
+//         const intelligenceBonus = Math.floor(intelligence / 10); // Intelligence influence
+//         const finalDiscount = Math.min(baseDiscount + intelligenceBonus, 90); // Cap at 90%
+
+//         // Update user's discount and last_spin timestamp
+//         await db.query(
+//             `UPDATE users
+//              SET discount = ?, last_spin = ?
+//              WHERE id = ?`,
+//             [finalDiscount, now, userId]
+//         );
+
+//         res.json({
+//             success: true,
+//             message: `You received a ${finalDiscount}% discount!`,
+//             discount: finalDiscount,
+//         });
+//     } catch (err) {
+//         console.error('Error spinning the wheel:', err.message, err.stack);
+//         res.status(500).json({ error: 'Failed to spin the wheel.' });
+//     }
+// });
+
+app.post('/tower-join', async (req, res) => {
+    const { id, userId } = req.body;
+
+    // Regular expression to validate UUID v4 format
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    // Check if id is a valid UUID
+    if (!uuidPattern.test(id)) {
+        return res.status(400).json({ error: 'Invalid UUID format for id.' });
     }
+
+    const checkQuery = `
+        SELECT * FROM tower_players WHERE userId = ?
+    `;
+    const deleteQuery = `
+        DELETE FROM tower_players WHERE userId = ?
+    `;
+    const insertQuery = `
+        INSERT INTO tower_players (id, userId, active)
+        VALUES (?, ?, ?)
+    `;
 
     try {
-        // Fetch user details including last_spin timestamp
-        const [user] = await db.query(
-            `SELECT last_spin FROM users WHERE id = ?`,
-            [userId]
-        );
+        // Check if a record with the same userId already exists
+        const [existingPlayer] = await db.query(checkQuery, [userId]);
 
-        if (user.length === 0) {
-            return res.status(404).json({ error: 'User not found.' });
+        // If a record with the same userId exists, delete it
+        if (existingPlayer.length > 0) {
+            await db.query(deleteQuery, [userId]);
         }
 
-        const { last_spin } = user[0];
-        const now = new Date();
+        // Insert the new record
+        await db.query(insertQuery, [id, userId, 1]);
 
-        // Check cooldown period (6 hours)
-        if (last_spin) {
-            const lastSpinDate = new Date(last_spin);
-            const hoursSinceLastSpin = (now - lastSpinDate) / (1000 * 60 * 60);
-
-            if (hoursSinceLastSpin < 6) {
-                const timeLeft = 6 - hoursSinceLastSpin;
-                return res.status(400).json({
-                    error: `You can spin the wheel again in ${Math.ceil(timeLeft)} hours.`,
-                });
-            }
-        }
-
-        // Calculate the discount
-        const baseDiscount = Math.floor(Math.random() * 21); // Random discount 0-20%
-        const intelligenceBonus = Math.floor(intelligence / 10); // Intelligence influence
-        const finalDiscount = Math.min(baseDiscount + intelligenceBonus, 90); // Cap at 90%
-
-        // Update user's discount and last_spin timestamp
-        await db.query(
-            `UPDATE users
-             SET discount = ?, last_spin = ?
-             WHERE id = ?`,
-            [finalDiscount, now, userId]
-        );
-
-        res.json({
-            success: true,
-            message: `You received a ${finalDiscount}% discount!`,
-            discount: finalDiscount,
-        });
-    } catch (err) {
-        console.error('Error spinning the wheel:', err.message, err.stack);
-        res.status(500).json({ error: 'Failed to spin the wheel.' });
+        return res.status(200).json({ message: 'Player added successfully!' });
+    } catch (error) {
+        console.error('Error in tower-join:', error);
+        return res.status(500).json({ error: 'Internal server error.' });
     }
 });
+
+
 
 app.get('/tower-leaderboard', async (req, res) => {
     try {
