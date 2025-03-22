@@ -391,13 +391,28 @@ app.post('/quests/select', async (req, res) => {
             return res.status(400).json({ error: 'You already have 8 active quests' });
         }
 
+        // Get quest difficulty
+        const [quest] = await db.query(`
+            SELECT difficulty 
+            FROM quests 
+            WHERE id = ?
+        `, [questId]);
+
+        if (quest.length === 0) {
+            return res.status(404).json({ error: 'Quest not found' });
+        }
+
+        const difficulty = quest[0].difficulty;
+
+        // Calculate expired_at based on difficulty
+        const expirationMinutes = difficulty * 15;
+        const expiredAt = new Date(now.getTime() + expirationMinutes * 60 * 1000);
+
         // Check if the user is already a participant in this quest
         const [existingParticipant] = await db.query(
             'SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ?',
             [questId, userId]
         );
-
-        const expiredAt = new Date(now.getTime() + 30 * 60 * 1000); // 30 minutes later
 
         if (existingParticipant.length > 0) {
             if (existingParticipant[0].progress === 'Started') {
@@ -420,16 +435,18 @@ app.post('/quests/select', async (req, res) => {
             `INSERT INTO quest_participants 
              (quest_id, user_id, progress, completed, joined_at, expired_at, completed_at) 
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+
             [questId, userId, 'Started', false, currentDate, expiredAt, null]
         );
 
-        res.status(201).json({ message: 'User added as participant with progress Started' });
+        res.status(201).json({ message: `User added as participant with progress Started, expires in ${expirationMinutes} minutes` });
 
     } catch (error) {
         console.error('Error selecting quest:', error);
         res.status(500).json({ error: 'An error occurred while selecting the quest.' });
     }
 });
+
 
 
 app.post('/quests/remove', async (req, res) => {
