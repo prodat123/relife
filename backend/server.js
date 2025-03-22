@@ -397,7 +397,7 @@ app.post('/quests/select', async (req, res) => {
             [questId, userId]
         );
 
-        const expiredAt = new Date(now.getTime() + 8 * 60 * 60 * 1000); // 8 hours later
+        const expiredAt = new Date(now.getTime() + 30 * 60 * 1000); // 30 minutes later
 
         if (existingParticipant.length > 0) {
             if (existingParticipant[0].progress === 'Started') {
