@@ -1606,15 +1606,10 @@ app.post('/tower-join', async (req, res) => {
         // Check if a record with the same userId already exists
         const [existingPlayer] = await db.query(checkQuery, [userId]);
 
-        if (existingPlayer.length > 0) {
-            // Update the existing player record with new id and active status, but leave floor as is
-            await db.query(updateQuery, [id, 1, userId]);
-            console.log(`Player with userId ${userId} updated.`);
-        } else {
-            // Insert the new record for the player with floor set to 0
+        if (existingPlayer.length === 0) {
             await db.query(insertQuery, [id, userId, 1, 0]);
             console.log(`New player with userId ${userId} added with floor 0.`);
-        }
+        }   
 
         return res.status(200).json({ message: 'Player processed successfully!' });
     } catch (error) {
@@ -1623,27 +1618,63 @@ app.post('/tower-join', async (req, res) => {
     }
 });
 
-app.put('/tower-floor-update', async (req, res) => {
-    const { id, floor } = req.body;
+app.post('/tower-restart', async (req, res) => {
+    let { userId } = req.body;
 
-    if (!id || floor === undefined) {
+    // Force convert userId to integer
+    userId = parseInt(userId, 10);
+
+    // Validate the conversion result for userId
+    if (isNaN(userId) || userId <= 0) {
+        return res.status(400).json({ error: 'Invalid userId. Must be a positive integer.' });
+    }
+
+    const checkQuery = `SELECT * FROM tower_players WHERE userId = ?;`;
+    const restartQuery = `
+        UPDATE tower_players
+        SET floor = 0
+        WHERE userId = ?;
+    `;
+
+    try {
+        const [existingPlayer] = await db.query(checkQuery, [userId]);
+
+        if (existingPlayer.length > 0) {
+            // Reset the floor to 0 if the player exists
+            await db.query(restartQuery, [userId]);
+            console.log(`Floor reset to 0 for userId ${userId}.`);
+            return res.status(200).json({ message: 'Floor reset successfully!' });
+        } else {
+            // User doesn't exist
+            console.log(`UserId ${userId} not found.`);
+            return res.status(404).json({ error: 'User does not exist. Cannot restart.' });
+        }
+
+    } catch (error) {
+        console.error('Error in tower-restart:', error);
+        return res.status(500).json({ error: 'Internal server error.' });
+    }
+});
+
+app.put('/tower-floor-update', async (req, res) => {
+    const { userId, floor } = req.body;
+
+    if (!userId || floor === undefined) {
         return res.status(400).send({ error: "ID and floor are required" });
     }
 
     const query = `
         UPDATE tower_players
         SET floor = ?
-        WHERE id = ?;
+        WHERE userId = ?;
     `;
 
     try {
-        const [result] = await db.query(query, [floor, id]);
+        const [result] = await db.query(query, [floor, userId]);
 
         if (result.affectedRows > 0) {
-            res.status(200).send({ message: `Floor updated successfully for ID: ${id}` });
-        } else {
-            res.status(404).send({ error: "Player not found" });
-        }
+            res.status(200).send({ message: `Floor updated successfully for userId: ${userId}` });
+        } 
 
     } catch (error) {
         console.error("Failed to update floor:", error);
@@ -1668,7 +1699,7 @@ app.get('/tower-floor', async (req, res) => {
         const [rows] = await db.query(query, [parseInt(userId, 10)]);
 
         if (rows.length === 0) {
-            return res.status(200).json({ floor: 1 });
+            return res.status(200).json({ floor: 0 });
             // return res.status(404).json({ message: 'Player not found.' });
         }
 
