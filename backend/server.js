@@ -381,6 +381,7 @@ app.post('/quests/select', async (req, res) => {
 
         // Check active quests
         const now = new Date();
+        const datetime = new Date().toISOString().split('T')[0];
         const [activeQuests] = await db.query(`
             SELECT COUNT(*) AS activeCount 
             FROM quest_participants 
@@ -422,9 +423,9 @@ app.post('/quests/select', async (req, res) => {
             // Update progress to 'Started' and set timestamps
             await db.query(
                 `UPDATE quest_participants 
-                 SET progress = ?, joined_at = ?, expired_at = ?, completed = ? 
+                 SET progress = ?, joined_at = ?, joined_at_datetime = ?, expired_at = ?, completed = ? 
                  WHERE id = ?`,
-                ['Started', currentDate, expiredAt, false, existingParticipant[0].id]
+                ['Started', currentDate, datetime, expiredAt, false, existingParticipant[0].id]
             );
 
             return res.status(200).json({ message: 'Quest progress updated to Started' });
@@ -3202,95 +3203,76 @@ app.post('/select-guild-quest', async (req, res) => {
 
 app.post('/calculate-total-completions', async (req, res) => {
     try {
-      const { groupQuestId, guildName } = req.body;
-      if (!groupQuestId || !guildName) {
-        return res.status(400).json({ error: 'groupQuestId and guildName are required' });
-      }
-  
-      // 1. Fetch guild data: group_quests and members
-      const guildQuery = 'SELECT group_quests, members FROM guilds WHERE name = ?';
-      const [guildResult] = await db.query(guildQuery, [guildName]);
-      if (guildResult.length === 0) {
-        return res.status(404).json({ error: 'Guild not found' });
-      }
-      const groupQuests = JSON.parse(guildResult[0].group_quests || '[]');
-      if (groupQuests.length === 0) {
-        return res.status(400).json({ error: 'No quests in the guild' });
-      }
-      const members = JSON.parse(guildResult[0].members || '[]');
-      const guildMemberIds = members.map(member => member.userId);
-  
-      // 2. Find the specific group quest in the guild's group_quests array using groupQuestId
-      const groupQuest = groupQuests.find(gq => gq.id === groupQuestId);
-      if (!groupQuest) {
-        return res.status(404).json({ error: 'Group quest not found in guild records' });
-      }
-      const selectedAt = groupQuest.selectedDate;
-      if (!selectedAt) {
-        return res.status(400).json({ error: 'Selected date missing for this group quest' });
-      }
-  
-      // 3. Fetch the completion criteria for this quest from the guild_quests table
-      const guildQuestQuery = 'SELECT completion_criteria FROM guild_quests WHERE id = ?';
-      const [guildQuestResult] = await db.query(guildQuestQuery, [groupQuestId]);
-      if (guildQuestResult.length === 0) {
-        return res.status(404).json({ error: 'Completion criteria not found for this quest' });
-      }
-      let completionCriteria = guildQuestResult[0].completion_criteria;
-      if (typeof completionCriteria === 'string') {
-        completionCriteria = JSON.parse(completionCriteria);
-      }
-      const { stat: requiredStat, quantity: requiredQuantity } = completionCriteria;
-      if (!requiredStat || !requiredQuantity) {
-        return res.status(400).json({ error: 'Invalid completion criteria' });
-      }
-  
-      // 4. Query quest_participants for records for this quest where:
-      //    - completed_at is after the group's selected_at, and
-      //    - user_id is one of the guild's members.
-      const participantsQuery = `
-        SELECT quest_id, user_id, completed_at
-        FROM quest_participants
-        WHERE 
-          completed_at > ?
-          AND user_id IN (?)
-      `;
-      const [participantsResult] = await db.query(participantsQuery, [selectedAt, guildMemberIds]);
-  
-      // 5. For each participant record, fetch the quest's stat_reward from the quests table
-      // and count the record as 1 valid completion if stat_reward includes the required stat.
-      let validCount = 0;
-      for (const participant of participantsResult) {
-        // Use the quest_id from the participant record (which should match groupQuestId)
-        const questId = participant.quest_id;
-        const questRewardQuery = 'SELECT stat_reward FROM quests WHERE id = ?';
-        const [questRewardResult] = await db.query(questRewardQuery, [questId]);
-        if (questRewardResult.length === 0) continue;
-        let statReward = questRewardResult[0].stat_reward;
-        if (typeof statReward === 'string') {
-          statReward = JSON.parse(statReward);
+        const { groupQuestId, guildName } = req.body;
+        if (!groupQuestId || !guildName) {
+            return res.status(400).json({ error: 'groupQuestId and guildName are required' });
         }
-        // If the stat_reward object contains the required stat, count this participant as valid
-        if (statReward.hasOwnProperty(requiredStat)) {
-          validCount++;
+    
+        // 1. Fetch guild data: group_quests and members
+        const guildQuery = 'SELECT group_quests, members FROM guilds WHERE name = ?';
+        const [guildResult] = await db.query(guildQuery, [guildName]);
+        if (guildResult.length === 0) {
+            return res.status(404).json({ error: 'Guild not found' });
         }
-      }
-  
-      // 6. Calculate progress percentage relative to the required quantity
-      const progressPercentage = (validCount / requiredQuantity) * 100;
-  
-      // 7. Return the total valid completions and progress percentage
-      return res.status(200).json({
-        questId: groupQuestId,
-        totalCompletions: validCount,
-        requiredCount: requiredQuantity,
-        progress: progressPercentage.toFixed(2)
-      });
+        const groupQuests = JSON.parse(guildResult[0].group_quests || '[]');
+        if (groupQuests.length === 0) {
+            return res.status(400).json({ error: 'No quests in the guild' });
+        }
+        const members = JSON.parse(guildResult[0].members || '[]');
+        const guildMemberIds = members.map(member => member.userId);
+    
+        // 2. Find the specific group quest in the guild's group_quests array using groupQuestId
+        const groupQuest = groupQuests.find(gq => gq.id === groupQuestId);
+        if (!groupQuest) {
+            return res.status(404).json({ error: 'Group quest not found in guild records' });
+        }
+        const selectedAt = groupQuest.selectedDate;
+        if (!selectedAt) {
+            return res.status(400).json({ error: 'Selected date missing for this group quest' });
+        }
+    
+        // 3. Fetch the completion criteria for this quest from the guild_quests table
+        const guildQuestQuery = 'SELECT completion_criteria FROM guild_quests WHERE id = ?';
+        const [guildQuestResult] = await db.query(guildQuestQuery, [groupQuestId]);
+        if (guildQuestResult.length === 0) {
+            return res.status(404).json({ error: 'Completion criteria not found for this quest' });
+        }
+        let completionCriteria = guildQuestResult[0].completion_criteria;
+        if (typeof completionCriteria === 'string') {
+            completionCriteria = JSON.parse(completionCriteria);
+        }
+        const { stat: requiredStat, quantity: requiredQuantity } = completionCriteria;
+        if (!requiredStat || !requiredQuantity) {
+            return res.status(400).json({ error: 'Invalid completion criteria' });
+        }
+
+        const participantsQuery = `
+            SELECT COUNT(*) AS completedCount
+            FROM quest_participants qp
+            JOIN quests q ON qp.quest_id = q.id
+            WHERE qp.joined_at_datetime > ?
+                AND qp.completed = 1
+                AND qp.user_id IN (?)
+                AND JSON_UNQUOTE(JSON_EXTRACT(q.stat_reward, CONCAT('$.', ?))) IS NOT NULL
+        `;
+
+        const [participantsResult] = await db.query(participantsQuery, [
+            selectedAt,        // the date threshold for joined_at
+            guildMemberIds,  // the list of guild member IDs
+            requiredStat,    // again, for the JSON_EXTRACT check
+        ]);
+
+        const completedCount = participantsResult[0].completedCount;
+
+        console.log(completedCount);
+        
+        // 7. Return the total valid completions and progress percentage
+        return res.status(200).json({completedCount});
     } catch (error) {
       console.error('Error calculating total completions:', error);
       return res.status(500).json({ error: 'Failed to calculate total completions' });
     }
-  });
+});
   
   
 
