@@ -1737,30 +1737,57 @@ app.post('/add-to-tower-leaderboard', (req, res) => {
         return res.status(400).json({ message: 'Missing required fields' });
     }
 
-    // Query to insert or update user data in the leaderboard table
-    const query = `
-        INSERT INTO tower_leaderboard (username, userId, floor, date)
-        VALUES (?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            floor = VALUES(floor),
-            date = VALUES(date)
+    // Query to check the existing floor for the given userId
+    const checkQuery = `
+        SELECT floor FROM tower_leaderboard WHERE userId = ?;
     `;
 
-    db.query(query, [username, userId, floor, achievedAt], (err, result) => {
+    db.query(checkQuery, [userId], (err, result) => {
         if (err) {
-            return res.status(500).json({ message: 'Error adding to leaderboard', error: err });
+            return res.status(500).json({ message: 'Error checking current floor', error: err });
         }
 
-        // Check if the query affected any rows
-        const isUpdated = result.affectedRows > 1;  // More than 1 means it was an update, not an insert
-        
-        if (isUpdated) {
-            return res.status(200).json({ message: 'Leaderboard updated', data: result });
+        // If the user already exists in the leaderboard
+        if (result.length > 0) {
+            const currentFloor = result[0].floor;
+
+            // If the new floor is higher than the current floor, update it
+            if (floor > currentFloor) {
+                const updateQuery = `
+                    UPDATE tower_leaderboard
+                    SET floor = ?, date = ?
+                    WHERE userId = ?;
+                `;
+
+                db.query(updateQuery, [floor, achievedAt, userId], (updateErr, updateResult) => {
+                    if (updateErr) {
+                        return res.status(500).json({ message: 'Error updating leaderboard', error: updateErr });
+                    }
+
+                    return res.status(200).json({ message: 'Leaderboard updated', data: updateResult });
+                });
+            } else {
+                // If the new floor is not higher, do not update
+                return res.status(200).json({ message: 'New floor is not higher. No update made.' });
+            }
         } else {
-            return res.status(200).json({ message: 'Leaderboard entry added', data: result });
+            // If no existing record, insert the new leaderboard entry
+            const insertQuery = `
+                INSERT INTO tower_leaderboard (username, userId, floor, date)
+                VALUES (?, ?, ?, ?);
+            `;
+
+            db.query(insertQuery, [username, userId, floor, achievedAt], (insertErr, insertResult) => {
+                if (insertErr) {
+                    return res.status(500).json({ message: 'Error adding to leaderboard', error: insertErr });
+                }
+
+                return res.status(200).json({ message: 'Leaderboard entry added', data: insertResult });
+            });
         }
     });
 });
+
 
 
 app.post('/vows', async (req, res) => {
