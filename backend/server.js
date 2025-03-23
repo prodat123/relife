@@ -1166,7 +1166,7 @@ app.post("/add-currency", async (req, res) => {
             // After updating currency, delete the row from tower_players
             const updateQuery = `
                 UPDATE tower_players
-                SET active = 0
+                SET active = 0, floor = 0
                 WHERE userId = ?;
             `;
             await db.query(updateQuery, [id]);
@@ -1181,10 +1181,6 @@ app.post("/add-currency", async (req, res) => {
         return res.status(500).json({ error: "Internal server error." });
     }
 });
-
-
-
-
 
 app.get('/shop/items', async (req, res) => {
     try {
@@ -1596,7 +1592,7 @@ app.post('/tower-join', async (req, res) => {
     const updateQuery = `
         UPDATE tower_players
         SET floor = 0
-        WHERE userId = ? AND active = 0;
+        WHERE userId = ?;
     `;
     const insertQuery = `
         INSERT INTO tower_players (id, userId, active, floor)
