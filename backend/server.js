@@ -1164,11 +1164,11 @@ app.post("/add-currency", async (req, res) => {
 
         if (updateResult.affectedRows > 0) {
             // After updating currency, delete the row from tower_players
-            const deleteQuery = `
-                DELETE FROM tower_players 
-                WHERE userId = ?
-            `;
-            await db.query(deleteQuery, [id]);
+            // const deleteQuery = `
+            //     DELETE FROM tower_players 
+            //     WHERE userId = ?
+            // `;
+            // await db.query(deleteQuery, [id]);
 
             return res.status(200).json({ reward });
         } else {
