@@ -434,10 +434,10 @@ app.post('/quests/select', async (req, res) => {
         // Add the user as a new participant
         await db.query(
             `INSERT INTO quest_participants 
-             (quest_id, user_id, progress, completed, joined_at, expired_at, completed_at) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+             (quest_id, user_id, progress, completed, joined_at, expired_at, completed_at, joined_at_datetime) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 
-            [questId, userId, 'Started', false, currentDate, expiredAt, null]
+            [questId, userId, 'Started', false, currentDate, expiredAt, null, datetime]
         );
 
         res.status(201).json({ message: `User added as participant with progress Started, expires in ${expirationMinutes} minutes` });
