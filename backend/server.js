@@ -1131,7 +1131,7 @@ app.post("/add-currency", async (req, res) => {
         const [playerResult] = await db.query(`
             SELECT userId, floor
             FROM tower_players 
-            WHERE id = ?
+            WHERE userId = ?
         `, [id]);
 
         if (playerResult.length === 0) {
@@ -1166,7 +1166,7 @@ app.post("/add-currency", async (req, res) => {
             // After updating currency, delete the row from tower_players
             const deleteQuery = `
                 DELETE FROM tower_players 
-                WHERE id = ?
+                WHERE userId = ?
             `;
             await db.query(deleteQuery, [id]);
 
