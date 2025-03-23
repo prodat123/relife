@@ -1164,11 +1164,12 @@ app.post("/add-currency", async (req, res) => {
 
         if (updateResult.affectedRows > 0) {
             // After updating currency, delete the row from tower_players
-            // const deleteQuery = `
-            //     DELETE FROM tower_players 
-            //     WHERE userId = ?
-            // `;
-            // await db.query(deleteQuery, [id]);
+            const updateQuery = `
+                UPDATE tower_players
+                SET active = 0
+                WHERE userId = ?;
+            `;
+            await db.query(updateQuery, [id]);
 
             return res.status(200).json({ reward });
         } else {
@@ -1594,8 +1595,8 @@ app.post('/tower-join', async (req, res) => {
     `;
     const updateQuery = `
         UPDATE tower_players
-        SET id = ?, active = ?
-        WHERE userId = ?;
+        SET floor = 0
+        WHERE userId = ? AND active = 0;
     `;
     const insertQuery = `
         INSERT INTO tower_players (id, userId, active, floor)
@@ -1606,10 +1607,17 @@ app.post('/tower-join', async (req, res) => {
         // Check if a record with the same userId already exists
         const [existingPlayer] = await db.query(checkQuery, [userId]);
 
-        if (existingPlayer.length === 0) {
+        if (existingPlayer.length > 0) {
+            if (existingPlayer[0].active === 0) {
+                // If user exists and is inactive, update the floor to 0
+                await db.query(updateQuery, [userId]);
+                console.log(`Player with userId ${userId} reset floor to 0.`);
+            }
+        } else {
+            // If no existing record, insert the new player
             await db.query(insertQuery, [id, userId, 1, 0]);
             console.log(`New player with userId ${userId} added with floor 0.`);
-        }   
+        }
 
         return res.status(200).json({ message: 'Player processed successfully!' });
     } catch (error) {
@@ -1617,6 +1625,7 @@ app.post('/tower-join', async (req, res) => {
         return res.status(500).json({ error: 'Internal server error.' });
     }
 });
+
 
 app.post('/tower-restart', async (req, res) => {
     let { userId } = req.body;
