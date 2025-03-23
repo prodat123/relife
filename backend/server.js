@@ -381,7 +381,8 @@ app.post('/quests/select', async (req, res) => {
 
         // Check active quests
         const now = new Date();
-        const datetime = new Date().toISOString().split('T')[0];
+        const datetime = now.toISOString().slice(0, 19).replace('T', ' ');       
+         
         const [activeQuests] = await db.query(`
             SELECT COUNT(*) AS activeCount 
             FROM quest_participants 
