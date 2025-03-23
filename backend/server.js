@@ -3225,7 +3225,7 @@ app.post('/calculate-total-completions', async (req, res) => {
       if (!groupQuest) {
         return res.status(404).json({ error: 'Group quest not found in guild records' });
       }
-      const selectedAt = groupQuest.selected_at;
+      const selectedAt = groupQuest.selectedDate;
       if (!selectedAt) {
         return res.status(400).json({ error: 'Selected date missing for this group quest' });
       }
