@@ -503,8 +503,6 @@ app.get('/quests/active', async (req, res) => {
             [userId, now]
         );
         
-
-        console.log(activeQuests);
         res.status(200).json(activeQuests);
     } catch (error) {
         console.error('Error fetching active quests:', error);
@@ -711,11 +709,6 @@ app.get('/quests/daily', async (req, res) => {
         `;
 
         const [results] = await db.query(query);
-
-        // Debug Timezone
-        const [timeResult] = await db.query("SELECT NOW() AS server_time, CURDATE() AS server_date;");
-        console.log('Server Time:', timeResult[0]?.server_time);
-        console.log('Server Date:', timeResult[0]?.server_date);
 
         if (!results || results.length === 0) {
             console.log('No quests found for today.');
@@ -1124,48 +1117,68 @@ app.get("/stages", async (req, res) => {
 });
 
 app.post("/add-currency", async (req, res) => {
-    const { id, reward } = req.body; // 'id' is now the tower id, not uid
+    const { id } = req.body;  // 'id' is the tower ID
 
     // Check for missing parameters
-    if (id === undefined || reward === undefined) {
-        return res.status(400).json({ error: "Missing parameters." });
-    }
-
-    // If reward is 0, skip the update and respond with a success message
-    if (reward === 0) {
-        return res.status(200).json({ message: "No currency added as reward is 0." });
+    if (id === undefined) {
+        return res.status(400).json({ error: "Missing tower ID." });
     }
 
     try {
-        // First, find the userId associated with the given tower id
-        const query = "SELECT userId FROM tower_players WHERE id = ?";
-        const [result] = await db.query(query, [id]);
+        // Find the userId and floor associated with the given tower id
+        const [playerResult] = await db.query(`
+            SELECT userId, floor
+            FROM tower_players 
+            WHERE id = ?
+        `, [id]);
 
-        if (result.length === 0) {
-            // If no tower with the given id is found, return an error
+        if (playerResult.length === 0) {
             return res.status(404).json({ error: "Tower not found." });
         }
 
-        const userId = result[0].userId;
+        const { userId, floor } = playerResult[0];
 
-        // Now, update the currency of the user with the corresponding userId
-        const updateQuery = "UPDATE users SET currency = currency + ? WHERE id = ?";
+        // Sum up the currency rewards for each floor the player has reached
+        const [rewardResult] = await db.query(`
+            SELECT SUM(currency_reward) AS totalReward
+            FROM stages
+            WHERE id <= ?
+        `, [floor]);
+
+        const reward = rewardResult[0].totalReward || 0;
+
+        // If no reward, return a message
+        if (reward === 0) {
+            return res.status(200).json({ message: "No currency added as reward is 0." });
+        }
+
+        // Update the currency of the user
+        const updateQuery = `
+            UPDATE users 
+            SET currency = currency + ? 
+            WHERE id = ?
+        `;
         const [updateResult] = await db.query(updateQuery, [reward, userId]);
 
         if (updateResult.affectedRows > 0) {
             // After updating currency, delete the row from tower_players
-            const deleteQuery = "DELETE FROM tower_players WHERE id = ?";
+            const deleteQuery = `
+                DELETE FROM tower_players 
+                WHERE id = ?
+            `;
             await db.query(deleteQuery, [id]);
 
-            return res.status(200).json({ message: "Currency added successfully and tower player removed!" });
+            return res.status(200).json({ reward });
         } else {
             return res.status(404).json({ error: "User not found." });
         }
+
     } catch (error) {
         console.error("Error updating currency_reward:", error);
         return res.status(500).json({ error: "Internal server error." });
     }
 });
+
 
 
 
@@ -1608,9 +1621,6 @@ app.post('/tower-join', async (req, res) => {
     }
 });
 
-
-
-
 app.put('/tower-floor-update', async (req, res) => {
     const { id, floor } = req.body;
 
@@ -1651,8 +1661,6 @@ app.get('/tower-floor', async (req, res) => {
         SELECT floor FROM tower_players
         WHERE userId = ?;
     `;
-
-    console.log(userId);
 
     try {
         const [rows] = await db.query(query, [parseInt(userId, 10)]);
@@ -2008,9 +2016,6 @@ app.get('/completed-quests-stats', async (req, res) => {
             return { date: dateStr, stats };
         });
         
-
-        console.log(result);
-
         res.json(result);
     } catch (error) {
         console.error('Error fetching completed quests and vows stats:', error);
@@ -2573,7 +2578,6 @@ app.get('/seed/:id', async (req, res) => {
 app.get("/craftable-items", async (req, res) => {
     try {
         const [result] = await db.query("SELECT * FROM craftable_items");
-        console.log(result);
         // Convert recipe from text to JSON
         const formattedItems = result.map(item => ({
             ...item,
@@ -2906,8 +2910,8 @@ app.post('/create-guild', async (req, res) => {
         const members = [{ userId: created_by, username: username,  role: "admin" }];
 
         // Insert new guild into the database
-        const sql = `INSERT INTO guilds (name, description, members, group_quests, created_at, privacy, request_list) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?)`;
+        const sql = `INSERT INTO guilds (name, description, members, group_quests, created_at, privacy, request_list, guild_gems) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
 
         await db.query(sql, [
             name,
@@ -2916,7 +2920,8 @@ app.post('/create-guild', async (req, res) => {
             JSON.stringify([]), // Empty group_quests
             created_at,
             privacy,
-            JSON.stringify([]) // Empty request_list
+            JSON.stringify([]), // Empty request_list
+            20
         ]);
 
         res.status(201).json({ message: 'Guild created successfully', newBalance });
@@ -3000,7 +3005,6 @@ app.post('/join-guild', async (req, res) => {
         res.status(500).json({ error: 'Failed to join the guild' });
     }
 });
-
 
 app.post('/leave-guild', async (req, res) => {
     try {
@@ -3127,18 +3131,181 @@ app.post('/handle-guild-request', async (req, res) => {
 app.get('/guild-quests', async (req, res) => {
     try {
         const [result] = await db.query("SELECT * FROM guild_quests");
-        res.json(result[0]);
+        res.json(result);
     } catch (error) {
         res.status(500).json({ error: "Failed to fetch craftable items" });
     }
 })
 
+app.post('/select-guild-quest', async (req, res) => {
+    try {
+      const { questId, userId, guildName } = req.body;
+  
+      if (!questId || !userId || !guildName) {
+        return res.status(400).json({ error: 'questId, userId, and guildName are required' });
+      }
+  
+      // 1. Fetch guild data and check if the user is an admin
+      const guildQuery = 'SELECT members, group_quests, guild_gems FROM guilds WHERE name = ?';
+      const [guildResult] = await db.query(guildQuery, [guildName]);
+  
+      if (guildResult.length === 0) {
+        return res.status(404).json({ error: 'Guild not found' });
+      }
+  
+      let { members, group_quests, guild_gems } = guildResult[0];
+      members = JSON.parse(members);
+      group_quests = JSON.parse(group_quests);
+  
+      // Check if the user is an admin
+      const admin = members.find(member => member.userId === userId && member.role === 'admin');
+  
+      if (!admin) {
+        return res.status(403).json({ error: 'User is not an admin in this guild' });
+      }
+  
+      // 2. Check if the questId exists in the guild_quests table
+      const questCheckQuery = 'SELECT * FROM guild_quests WHERE id = ?';
+      const [questCheckResult] = await db.query(questCheckQuery, [questId]);
+  
+      if (questCheckResult.length === 0) {
+        return res.status(404).json({ error: 'Quest not found' });
+      }
+  
+      // 3. Check if the guild has enough gems for the quest
+      if (guild_gems < questCheckResult[0].price) {
+        return res.status(400).json({ error: 'Not enough guild gems for this quest' });
+      }
+  
+      // 4. Ensure that the quest is not already selected
+      if (group_quests.some(quest => quest.id === questId)) {
+        return res.status(400).json({ error: 'Quest is already selected for the guild' });
+      }
+  
+      // 5. Add the quest with the selected date to the group_quests
+      const newQuest = { id: questId, selectedDate: new Date() };
+      group_quests.push(newQuest);
+  
+      // Deduct the price of the quest from guild_gems
+      const updatedGuildGems = guild_gems - questCheckResult[0].price;
+  
+      // 6. Update guild's group_quests and guild_gems columns
+      const updateGuildQuery = 'UPDATE guilds SET group_quests = ?, guild_gems = ? WHERE name = ?';
+      await db.query(updateGuildQuery, [JSON.stringify(group_quests), updatedGuildGems, guildName]);
+  
+      return res.status(200).json({ message: 'Quest successfully added to the guild' });
+    } catch (error) {
+      console.error('Error handling select-guild-quest request:', error);
+      return res.status(500).json({ error: 'Failed to process request' });
+    }
+});
 
+app.post('/calculate-total-completions', async (req, res) => {
+    try {
+        const { groupQuestId, guildName } = req.body;
+        if (!groupQuestId || !guildName) {
+            return res.status(400).json({ error: 'groupQuestId and guildName are required' });
+        }
+  
+        // 1. Fetch guild data to get group_quests and members
+        const guildQuery = 'SELECT group_quests, members FROM guilds WHERE name = ?';
+        const [guildResult] = await db.query(guildQuery, [guildName]);
+        if (guildResult.length === 0) {
+            return res.status(404).json({ error: 'Guild not found' });
+        }
+        const groupQuests = JSON.parse(guildResult[0].group_quests || '[]');
 
+        console.log(groupQuests);
 
+        if (groupQuests.length === 0) {
+            return res.status(400).json({ error: 'No quests in the guild' });
+        }
 
+        const members = JSON.parse(guildResult[0].members || '[]');
 
- 
+        console.log(members);
+
+        const guildMemberIds = members.map(member => member.userId);
+    
+        // 2. Find the specific group quest from the guild's group_quests array using groupQuestId
+        const groupQuest = groupQuests.find(gq => gq.id === groupQuestId);
+        if (!groupQuest) {
+            return res.status(404).json({ error: 'Group quest not found in guild records' });
+        }
+        const selectedAt = groupQuest.selectedDate;
+        if (!selectedAt) {
+            return res.status(400).json({ error: 'Selected date missing for this group quest' });
+        }
+    
+        // 3. Fetch the completion criteria for this quest from the guild_quests table
+        const guildQuestQuery = 'SELECT completion_criteria FROM guild_quests WHERE id = ?';
+        const [guildQuestResult] = await db.query(guildQuestQuery, [groupQuestId]);
+        if (guildQuestResult.length === 0) {
+            return res.status(404).json({ error: 'Completion criteria not found for this quest' });
+        }
+        let completionCriteria = guildQuestResult[0].completion_criteria;
+        if (typeof completionCriteria === 'string') {
+            completionCriteria = JSON.parse(completionCriteria);
+        }
+
+        console.log(completionCriteria);
+
+        const { stat: requiredStat, quantity: requiredQuantity } = completionCriteria;
+        if (!requiredStat || !requiredQuantity) {
+            return res.status(400).json({ error: 'Invalid completion criteria' });
+        }
+    
+        // 4. Fetch the quest's stat_reward from the quests table (using groupQuestId)
+        const questQuery = 'SELECT stat_reward FROM quests WHERE id = ?';
+        const [questResult] = await db.query(questQuery, [groupQuestId]);
+        if (questResult.length === 0) {
+            return res.status(404).json({ error: 'Quest details not found' });
+        }
+        let statReward = questResult[0].stat_reward;
+        if (typeof statReward === 'string') {
+            statReward = JSON.parse(statReward);
+        }
+        // Check if the quest rewards the required stat. If not, then no valid completions.
+        if (!statReward.hasOwnProperty(requiredStat)) {
+            return res.status(200).json({
+            totalCompletions: 0,
+            note: `Quest does not reward stat '${requiredStat}'`
+            });
+        }
+    
+        // 5. Query the quest_participants table for completions by guild members
+        // for this quest, only counting completions after the group's selected_at.
+        const participantsQuery = `
+            SELECT COUNT(*) AS completedCount
+            FROM quest_participants
+            WHERE quest_id = ?
+            AND completed_at > ?
+            AND user_id IN (?)
+        `;
+        const [participantsResult] = await db.query(participantsQuery, [groupQuestId, selectedAt, guildMemberIds]);
+        const completedCount = participantsResult[0].completedCount;
+    
+        // 6. Each valid participant record counts as 1 contribution.
+        // Sum up the valid completions (each record counts as 1).
+        const totalCompletions = completedCount; // Since each is 1
+    
+        // Optionally, you could also calculate a progress percentage:
+        const progressPercentage = (totalCompletions / requiredQuantity) * 100;
+    
+        // 7. Return the total completions and progress percentage
+        return res.status(200).json({
+            questId: groupQuestId,
+            totalCompletions,
+            requiredCount: requiredQuantity,
+            progress: progressPercentage.toFixed(2)
+        });
+    } catch (error) {
+        console.error('Error calculating total completions:', error);
+        return res.status(500).json({ error: 'Failed to calculate total completions' });
+    }
+});
+  
+
 
 app.listen(3001, () => {
     console.log('✅ Backend running on HTTP at port 3001');
