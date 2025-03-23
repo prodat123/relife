@@ -382,7 +382,7 @@ app.post('/quests/select', async (req, res) => {
         // Check active quests
         const now = new Date();
         const datetime = now.toISOString().slice(0, 19).replace('T', ' ');       
-         
+
         const [activeQuests] = await db.query(`
             SELECT COUNT(*) AS activeCount 
             FROM quest_participants 
@@ -1668,7 +1668,8 @@ app.get('/tower-floor', async (req, res) => {
         const [rows] = await db.query(query, [parseInt(userId, 10)]);
 
         if (rows.length === 0) {
-            return res.status(404).json({ message: 'Player not found.' });
+            return res.status(200).json({ floor: 1 });
+            // return res.status(404).json({ message: 'Player not found.' });
         }
 
         return res.status(200).json({ floor: rows[0].floor });
