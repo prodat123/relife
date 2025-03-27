@@ -69,8 +69,8 @@ app.post('/auth/signup', async (req, res) => {
         const joinedAt = new Date().toISOString().slice(0, 10);
 
         await db.query(
-            'INSERT INTO users (username, email, age, password, experience, level, stats, joined_at, head, torso, legs, feet) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [username, email, age, hashedPassword, 0, 1, defaultStats, joinedAt, '', '', '', '']
+            'INSERT INTO users (username, email, age, password, experience, stats, joined_at, head, torso, legs, feet) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [username, email, age, hashedPassword, 0, defaultStats, joinedAt, '', '', '', '']
         );
 
         res.status(201).json({ message: 'User created successfully', username });
@@ -104,7 +104,6 @@ app.post('/auth/login', async (req, res) => {
             id: user.id,
             username: user.username,
             experience: user.experience,
-            level: user.level,
             stats: JSON.parse(user.stats), // Assuming stats is stored as a JSON string
             head: user.head,
             torso: user.body, 
@@ -769,7 +768,6 @@ app.get('/account', async (req, res) => {
         res.status(200).json({
             username: user.username,
             experience: user.experience,
-            level: user.level,
             stats: JSON.parse(user.stats || '{}'),
             equipment,
             inventory: inventoryItems, // Send inventory directly from the user's data
@@ -852,7 +850,7 @@ app.get('/leaderboard', async (req, res) => {
         const offset = (page - 1) * limit;
 
         const [ users ] = await db.query(`
-            SELECT id, username, experience, level 
+            SELECT id, username, experience 
             FROM users 
             ORDER BY experience DESC 
             LIMIT ? OFFSET ?
@@ -3249,7 +3247,7 @@ app.post('/select-guild-quest', async (req, res) => {
       }
   
       // 5. Add the quest with the selected date to the group_quests
-      const newQuest = { id: questId, selectedDate: new Date() };
+      const newQuest = { id: questId, selectedDate: new Date(), claimedMembers: [] };
       group_quests.push(newQuest);
   
       // Deduct the price of the quest from guild_gems
@@ -3338,7 +3336,114 @@ app.post('/calculate-total-completions', async (req, res) => {
       return res.status(500).json({ error: 'Failed to calculate total completions' });
     }
 });
-  
+
+app.post('/finish-guild-quest', async (req, res) => {
+    const { questId, userId, guildName } = req.body;
+
+    try {
+        const completionDate = new Date().toISOString().split('T')[0];
+
+        // Retrieve the quest's rewards
+        const [quest] = await db.query(
+            `SELECT experience_reward, item_reward, stat_reward FROM guild_quests WHERE id = ?`,
+            [questId]
+        );
+
+        if (quest.length === 0) {
+            return res.status(404).json({ error: 'Quest not found.' });
+        }
+
+        const { experience_reward: experienceReward, item_reward: itemReward, stat_reward: statReward } = quest[0];
+
+        // Update user's experience points
+        if (experienceReward) {
+            await db.query(
+                `UPDATE users
+                 SET experience = experience + ?
+                 WHERE id = ?`,
+                [experienceReward, userId]
+            );
+        }
+
+        // Update user's stats if statReward exists
+        if (statReward) {
+            const statUpdates = JSON.parse(statReward);
+
+            // Fetch current user stats
+            const [user] = await db.query(
+                `SELECT stats FROM users WHERE id = ?`,
+                [userId]
+            );
+            let userStats = JSON.parse(user[0].stats || '{}');
+
+            // Apply stat rewards
+            for (let stat in statUpdates) {
+                userStats[stat] = (userStats[stat] || 0) + statUpdates[stat];
+            }
+
+            // Save updated stats
+            await db.query(
+                `UPDATE users
+                 SET stats = ?
+                 WHERE id = ?`,
+                [JSON.stringify(userStats), userId]
+            );
+        }
+
+        // Increment into group_quests and add userId to claimedMembers
+        const [guild] = await db.query(
+            `SELECT group_quests, members FROM guilds WHERE name = ?`,
+            [guildName]
+        );
+
+        if (guild.length === 0) {
+            return res.status(404).json({ error: 'Guild not found.' });
+        }
+
+        let groupQuests = JSON.parse(guild[0].group_quests || '{}');
+        let members = JSON.parse(guild[0].members || '[]');
+
+        // Ensure claimedMembers array exists
+        if (!groupQuests[0].claimedMembers) {
+            groupQuests[0].claimedMembers = [];
+        }
+
+        if (!groupQuests[0].claimedMembers.includes(userId)) {
+            groupQuests[0].claimedMembers.push(userId);
+        }
+
+        // Check if all members have claimed the quest
+        const allClaimed = members.every(member => 
+            groupQuests[0].claimedMembers.includes(member.userId)
+        );
+
+        if (allClaimed) {
+            // Remove the quest from group_quests
+            groupQuests = groupQuests.filter(quest => quest.id !== questId);
+        }
+
+        // Save the updated group_quests
+        await db.query(
+            `UPDATE guilds
+             SET group_quests = ?
+             WHERE name = ?`,
+            [JSON.stringify(groupQuests), guildName]
+        );
+
+        res.json({ 
+            success: true, 
+            message: allClaimed 
+                ? 'All members claimed the quest. Quest removed from group quests.' 
+                : 'Quest marked as finished, rewards applied, and group quest updated.' 
+        });
+
+    } catch (err) {
+        console.error('Error finishing quest:', err);
+        res.status(500).json({ error: 'Failed to mark quest as finished.' });
+    }
+});
+
+
   
 
 
