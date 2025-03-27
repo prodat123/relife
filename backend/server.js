@@ -69,7 +69,7 @@ app.post('/auth/signup', async (req, res) => {
         const joinedAt = new Date().toISOString().slice(0, 10);
 
         await db.query(
-            'INSERT INTO users (username, email, age, password, experience, stats, joined_at, head, torso, legs, feet) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO users (username, email, age, password, experience, stats, joined_at, head, torso, legs, feet) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [username, email, age, hashedPassword, 0, defaultStats, joinedAt, '', '', '', '']
         );
 
