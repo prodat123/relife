@@ -373,10 +373,37 @@ app.post('/quests/select', async (req, res) => {
 
     try {
         // Check if the user exists
-        const [userExists] = await db.query('SELECT id FROM users WHERE id = ?', [userId]);
+        const [userExists] = await db.query('SELECT id, guild FROM users WHERE id = ?', [userId]);
         if (userExists.length === 0) {
             return res.status(400).json({ error: 'User does not exist' });
         }
+
+        const guildName = userExists[0].guild;
+
+        let extraSlots = 0;
+        let questTimerBuff = 0;
+        if (guildName) {
+            const [guild] = await db.query(`
+                SELECT guild_upgrades 
+                FROM guilds 
+                WHERE name = ?
+            `, [guildName]);
+    
+            if (guild.length === 0) {
+                return res.status(404).json({ error: 'Guild not found' });
+            }
+
+            const guildUpgrades = JSON.parse(guild[0].guild_upgrades);
+
+            // Separate upgrades by type
+            extraSlots = guildUpgrades.filter(u => u.type === 'extraSlots')[0].level * 2 || 0;
+            questTimerBuff = guildUpgrades.filter(u => u.type === 'questTimerBuff')[0].level * 5 || 0;        
+            
+        }
+
+        
+
+        
 
         // Check active quests
         const now = new Date();
@@ -388,8 +415,8 @@ app.post('/quests/select', async (req, res) => {
             WHERE user_id = ? AND expired_at > ?
         `, [userId, now]);
 
-        if (activeQuests[0].activeCount >= 8) {
-            return res.status(400).json({ error: 'You already have 8 active quests' });
+        if (activeQuests[0].activeCount >= (8 + extraSlots)) {
+            return res.status(400).json({ error: `You already have ${8 + extraSlots} active quests` });
         }
 
         // Get quest difficulty
@@ -406,7 +433,7 @@ app.post('/quests/select', async (req, res) => {
         const difficulty = quest[0].difficulty;
 
         // Calculate expired_at based on difficulty
-        const expirationMinutes = difficulty * 15;
+        const expirationMinutes = (difficulty * 20) - questTimerBuff;
         const expiredAt = new Date(now.getTime() + expirationMinutes * 60 * 1000);
 
         // Check if the user is already a participant in this quest
@@ -571,6 +598,31 @@ app.post('/quests/finish', async (req, res) => {
     const { questId, userId } = req.body;
 
     try {
+        const [userExists] = await db.query('SELECT id, guild FROM users WHERE id = ?', [userId]);
+        if (userExists.length === 0) {
+            return res.status(400).json({ error: 'User does not exist' });
+        }
+
+        const guildName = userExists[0].guild;
+
+        let xpBoost = 0;
+        if (guildName) {
+            const [guild] = await db.query(`
+                SELECT guild_upgrades 
+                FROM guilds 
+                WHERE name = ?
+            `, [guildName]);
+    
+            if (guild.length === 0) {
+                return res.status(404).json({ error: 'Guild not found' });
+            }
+    
+            const guildUpgrades = JSON.parse(guild[0].guild_upgrades);
+    
+            xpBoost = guildUpgrades.filter(u => u.type === 'xpBoost')[0].level * 8 || 0;
+        }
+
+        
 
         const completionDate = new Date().toISOString().split('T')[0];
 
@@ -602,13 +654,15 @@ app.post('/quests/finish', async (req, res) => {
             [completionDate, questId, userId]
         );
 
+        let boostedExperienceReward = experienceReward + xpBoost;
+
         // Update user's experience points
-        if (experienceReward) {
+        if (boostedExperienceReward) {
             await db.query(
                 `UPDATE users
                  SET experience = experience + ?
                  WHERE id = ?`,
-                [experienceReward, userId]
+                [boostedExperienceReward, userId]
             );
         }
 
@@ -1727,64 +1781,62 @@ app.get('/tower-leaderboard', async (req, res) => {
 });
 
 
-app.post('/add-to-tower-leaderboard', (req, res) => {
-    const { username, userId, floor, achievedAt } = req.body;
+app.post('/add-to-tower-leaderboard', async (req, res) => {
+    try {
+        const { username, userId, achievedAt } = req.body;
 
-    // Ensure data is provided
-    if (!username || !userId || !floor || !achievedAt) {
-        return res.status(400).json({ message: 'Missing required fields' });
-    }
-
-    // Query to check the existing floor for the given userId
-    const checkQuery = `
-        SELECT floor FROM tower_leaderboard WHERE userId = ?;
-    `;
-
-    db.query(checkQuery, [userId], (err, result) => {
-        if (err) {
-            return res.status(500).json({ message: 'Error checking current floor', error: err });
+        if (!username || !userId || !achievedAt) {
+            return res.status(400).json({ message: 'Missing required fields' });
         }
 
-        // If the user already exists in the leaderboard
-        if (result.length > 0) {
-            const currentFloor = result[0].floor;
+        // Get the floor from tower_players
+        const getFloorQuery = `SELECT floor FROM tower_players WHERE userId = ?`;
+        const [floorResult] = await db.query(getFloorQuery, [userId]);
 
-            // If the new floor is higher than the current floor, update it
+        if (floorResult.length === 0) {
+            return res.status(404).json({ message: 'User not found in tower_players' });
+        }
+
+        const floor = floorResult[0].floor;
+
+        // Check if the user is already in the leaderboard
+        const checkQuery = `SELECT floor FROM tower_leaderboard WHERE userId = ?`;
+        const [checkResult] = await db.query(checkQuery, [userId]);
+
+        if (checkResult.length > 0) {
+            const currentFloor = checkResult[0].floor;
             if (floor > currentFloor) {
+                // Update the leaderboard if the new floor is higher
                 const updateQuery = `
                     UPDATE tower_leaderboard
                     SET floor = ?, date = ?
                     WHERE userId = ?;
                 `;
 
-                db.query(updateQuery, [floor, achievedAt, userId], (updateErr, updateResult) => {
-                    if (updateErr) {
-                        return res.status(500).json({ message: 'Error updating leaderboard', error: updateErr });
-                    }
+                await db.query(updateQuery, [floor, achievedAt, userId]);
 
-                    return res.status(200).json({ message: 'Leaderboard updated', data: updateResult });
-                });
+                return res.status(200).json({ message: 'Leaderboard updated' });
             } else {
-                // If the new floor is not higher, do not update
                 return res.status(200).json({ message: 'New floor is not higher. No update made.' });
             }
         } else {
-            // If no existing record, insert the new leaderboard entry
+            // User not in leaderboard, insert new record
             const insertQuery = `
                 INSERT INTO tower_leaderboard (username, userId, floor, date)
                 VALUES (?, ?, ?, ?);
             `;
 
-            db.query(insertQuery, [username, userId, floor, achievedAt], (insertErr, insertResult) => {
-                if (insertErr) {
-                    return res.status(500).json({ message: 'Error adding to leaderboard', error: insertErr });
-                }
+            await db.query(insertQuery, [username, userId, floor, achievedAt]);
 
-                return res.status(200).json({ message: 'Leaderboard entry added', data: insertResult });
-            });
+            return res.status(201).json({ message: 'Leaderboard entry added' });
         }
-    });
+
+    } catch (error) {
+        console.error('Error interacting with the database:', error);
+        res.status(500).json({ message: 'Failed to interact with the database', error });
+    }
 });
+
 
 
 
@@ -2235,7 +2287,7 @@ app.post('/updateSpells', async (req, res) => {
             SET spells = ? 
             WHERE id = ?;
         `;
-        await db.query(query, [spellsString, userId]);
+        db.query(query, [spellsString, userId]);
         res.json({ message: 'Spells updated successfully' });
     } catch (error) {
         console.error('Error updating spells:', error);
@@ -2793,36 +2845,67 @@ app.get("/perks/:name", async (req, res) => {
 });
 
 app.post('/choose-perk', async (req, res) => {
-    const { userId, perkName, stat, newPerkPoints } = req.body;
+    const { userId, perkName } = req.body;
 
     try {
-        // Fetch user's perks
-        const [userRows] = await db.query(`SELECT perks FROM users WHERE id = ?`, [userId]);
+        // ✅ Check if the perk exists and fetch its point cost and type
+        const [perkCheck] = await db.query(
+            `SELECT pointCost, type FROM perks WHERE name = ?`, [perkName]
+        );
+
+        if (perkCheck.length === 0) {
+            return res.status(404).json({ error: "Perk does not exist" });
+        }
+
+        const { pointCost, type } = perkCheck[0];
+
+        // ✅ Fetch user's perks and current perk points
+        const [userRows] = await db.query(
+            `SELECT perks, perkPoints FROM users WHERE id = ?`, 
+            [userId]
+        );
 
         if (userRows.length === 0) {
             return res.status(404).json({ error: "User not found" });
         }
 
         let perks = JSON.parse(userRows[0].perks || '[]'); // Ensure it's an array
+        const currentPerkPoints = userRows[0].perkPoints;
 
-        // Check if the perk already exists
+        // ✅ Check if the user has enough perk points
+        if (currentPerkPoints < pointCost) {
+            return res.status(400).json({ error: "Not enough perk points" });
+        }
+
+        // ✅ Check if the user already has the perk
         if (perks.some(perk => perk.perkName === perkName)) {
             return res.status(400).json({ error: "Perk already chosen" });
         }
 
-        // Add new perk with full stat milestone tracking
-        perks.push({ perkName, stat: stat });
+        // ✅ Add the new perk with the fetched 'type'
+        perks.push({ perkName, type });
 
-        // Update the user's perks in the database
-        await db.query(`UPDATE users SET perks = ?, perkPoints = ? WHERE id = ?`, [JSON.stringify(perks), newPerkPoints, userId]);
+        // ✅ Deduct the perk cost from the user's perk points
+        const updatedPerkPoints = currentPerkPoints - pointCost;
 
-        res.json({ message: `Successfully added perk: ${perkName}` });
+        // ✅ Update the user's perks and perk points in the database
+        await db.query(
+            `UPDATE users SET perks = ?, perkPoints = ? WHERE id = ?`,
+            [JSON.stringify(perks), updatedPerkPoints, userId]
+        );
+
+        res.json({ 
+            message: `Successfully added perk: ${perkName}`, 
+            type,
+            remainingPerkPoints: updatedPerkPoints 
+        });
 
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: "Failed to save perk" });
     }
 });
+
 
 app.post("/claim-perk-point", async (req, res) => {
     const { userId, stat, milestone } = req.body;
@@ -2957,7 +3040,7 @@ app.post('/create-guild', async (req, res) => {
         }
 
         // Deduct 20,000 gold from user's balance
-        const newBalance = userGold - 20000;
+        const newBalance = userGold - 50000;
         const updateUserCurrencyQuery = 'UPDATE users SET currency = ?, guild = ? WHERE id = ?';
         await db.query(updateUserCurrencyQuery, [newBalance, name, created_by]);
 
@@ -3001,7 +3084,7 @@ app.post('/join-guild', async (req, res) => {
         const { name, userId, username } = req.body;
 
         if (!name || !userId || !username) {
-            return res.status(400).json({ error: 'Guild name and userId are required' });
+            return res.status(400).json({ error: 'Guild name, userId, and username are required' });
         }
 
         // Check if the user exists
@@ -3034,6 +3117,11 @@ app.post('/join-guild', async (req, res) => {
         members = JSON.parse(members);
         request_list = JSON.parse(request_list);
 
+        // Check if the guild has reached maximum capacity (50 members)
+        if (members.length >= 50) {
+            return res.status(403).json({ error: 'Maximum guild capacity reached (50 members)' });
+        }
+
         // Check if the user is already a member
         if (members.some(member => member.userId === userId)) {
             return res.status(400).json({ error: 'User is already a member of this guild' });
@@ -3054,8 +3142,8 @@ app.post('/join-guild', async (req, res) => {
             return res.status(200).json({ message: 'User successfully joined the guild' });
         } else {
             // If private, add user to the request list
-            if (!request_list.includes(userId)) {
-                request_list.push({userId, username: username});
+            if (!request_list.some(req => req.userId === userId)) {
+                request_list.push({ userId, username: username });
             }
 
             // Update the guild with the new request list
@@ -3069,6 +3157,7 @@ app.post('/join-guild', async (req, res) => {
         res.status(500).json({ error: 'Failed to join the guild' });
     }
 });
+
 
 app.post('/leave-guild', async (req, res) => {
     try {
@@ -3094,28 +3183,38 @@ app.post('/leave-guild', async (req, res) => {
             return res.status(400).json({ error: 'User is not a member of this guild' });
         }
 
-        // Check if the user is an admin and the last admin
         const isAdmin = members[userIndex].role === "admin";
-        const remainingAdmins = members.filter(member => member.role === "admin" && Number(member.userId) !== Number(userId));
 
-        if (isAdmin && remainingAdmins.length === 0 && members.length > 1) {
-            return res.status(403).json({ error: 'You are the last admin. Assign another admin before leaving.' });
-        }
-
-        // Remove user from members list
+        // Remove user from the members list
         members.splice(userIndex, 1);
 
         if (members.length === 0) {
             // If no members left, delete the guild
             const deleteGuildQuery = 'DELETE FROM guilds WHERE name = ?';
             await db.query(deleteGuildQuery, [name]);
-        } else {
-            // Update guild members in database
-            const updateQuery = 'UPDATE guilds SET members = ? WHERE name = ?';
-            await db.query(updateQuery, [JSON.stringify(members), name]);
+            
+            // Remove guild association from user
+            const updateUserQuery = 'UPDATE users SET guild = NULL WHERE id = ?';
+            await db.query(updateUserQuery, [userId]);
+
+            return res.status(200).json({ message: 'Guild deleted as no members are left' });
         }
 
-        // Remove guild association from user in the users table
+        if (isAdmin) {
+            // If the leaving user is the last admin, assign a random member as admin
+            const remainingAdmins = members.filter(member => member.role === "admin");
+
+            if (remainingAdmins.length === 0) {
+                const randomIndex = Math.floor(Math.random() * members.length);
+                members[randomIndex].role = "admin";  // Assign admin role to a random member
+            }
+        }
+
+        // Update guild members in the database
+        const updateQuery = 'UPDATE guilds SET members = ? WHERE name = ?';
+        await db.query(updateQuery, [JSON.stringify(members), name]);
+
+        // Remove guild association from user
         const updateUserQuery = 'UPDATE users SET guild = NULL WHERE id = ?';
         await db.query(updateUserQuery, [userId]);
 
@@ -3126,6 +3225,7 @@ app.post('/leave-guild', async (req, res) => {
         res.status(500).json({ error: 'Failed to quit the guild' });
     }
 });
+
 
 app.post('/handle-guild-request', async (req, res) => {
     try {
@@ -3343,9 +3443,9 @@ app.post('/finish-guild-quest', async (req, res) => {
     try {
         const completionDate = new Date().toISOString().split('T')[0];
 
-        // Retrieve the quest's rewards
+        // Retrieve the quest's rewards including currency_reward
         const [quest] = await db.query(
-            `SELECT experience_reward, item_reward, stat_reward FROM guild_quests WHERE id = ?`,
+            `SELECT experience_reward, item_reward, stat_reward, currency_reward FROM guild_quests WHERE id = ?`,
             [questId]
         );
 
@@ -3353,7 +3453,7 @@ app.post('/finish-guild-quest', async (req, res) => {
             return res.status(404).json({ error: 'Quest not found.' });
         }
 
-        const { experience_reward: experienceReward, item_reward: itemReward, stat_reward: statReward } = quest[0];
+        const { experience_reward: experienceReward, item_reward: itemReward, stat_reward: statReward, currency_reward: currencyReward } = quest[0];
 
         // Update user's experience points
         if (experienceReward) {
@@ -3392,7 +3492,7 @@ app.post('/finish-guild-quest', async (req, res) => {
 
         // Increment into group_quests and add userId to claimedMembers
         const [guild] = await db.query(
-            `SELECT group_quests, members FROM guilds WHERE name = ?`,
+            `SELECT group_quests, members, guild_gems FROM guilds WHERE name = ?`,
             [guildName]
         );
 
@@ -3402,6 +3502,7 @@ app.post('/finish-guild-quest', async (req, res) => {
 
         let groupQuests = JSON.parse(guild[0].group_quests || '{}');
         let members = JSON.parse(guild[0].members || '[]');
+        let guildGems = guild[0].guild_gems;
 
         // Ensure claimedMembers array exists
         if (!groupQuests[0].claimedMembers) {
@@ -3418,22 +3519,27 @@ app.post('/finish-guild-quest', async (req, res) => {
         );
 
         if (allClaimed) {
+            // Add the currency reward to the guild's gems
+            if (currencyReward) {
+                guildGems += currencyReward;
+            }
+
             // Remove the quest from group_quests
             groupQuests = groupQuests.filter(quest => quest.id !== questId);
         }
 
-        // Save the updated group_quests
+        // Save the updated group_quests and guild_gems
         await db.query(
             `UPDATE guilds
-             SET group_quests = ?
+             SET group_quests = ?, guild_gems = ?
              WHERE name = ?`,
-            [JSON.stringify(groupQuests), guildName]
+            [JSON.stringify(groupQuests), guildGems, guildName]
         );
 
         res.json({ 
             success: true, 
             message: allClaimed 
-                ? 'All members claimed the quest. Quest removed from group quests.' 
+                ? 'All members claimed the quest. Quest removed from group quests and currency added to guild gems.' 
                 : 'Quest marked as finished, rewards applied, and group quest updated.' 
         });
 
@@ -3442,6 +3548,183 @@ app.post('/finish-guild-quest', async (req, res) => {
         res.status(500).json({ error: 'Failed to mark quest as finished.' });
     }
 });
+
+
+app.post('/guild-upgrade', async (req, res) => {
+    const { guildName, upgradeType, cost, userId } = req.body;  // Include userId in request
+
+    if (!guildName || !upgradeType || !cost || !userId) {
+        return res.status(400).send({ message: "Missing required fields" });
+    }
+
+    try {
+        // ✅ Check if the user is an admin
+        const [guild] = await db.query(`
+            SELECT guild_gems, guild_upgrades, members 
+            FROM guilds 
+            WHERE name = ?
+        `, [guildName]);
+
+        if (guild.length === 0) {
+            return res.status(404).send({ message: "Guild not found" });
+        }
+
+        const { guild_gems, guild_upgrades, members } = guild[0];
+
+        // ✅ Verify admin status
+        const membersArray = JSON.parse(members);
+        const user = membersArray.find(member => Number(member.userId) === Number(userId));
+
+        if (!user || user.role !== "admin") {
+            return res.status(403).send({ message: "Only admins can upgrade the guild" });
+        }
+
+        // ✅ Parse upgrades or initialize as empty array
+        let upgrades = [];
+        try {
+            upgrades = guild_upgrades ? JSON.parse(guild_upgrades) : [];
+            
+            // Ensure it's an array, reset to empty array if invalid
+            if (!Array.isArray(upgrades)) {
+                console.warn("Invalid format detected, resetting to empty array.");
+                upgrades = [];
+            }
+        } catch (error) {
+            console.error("Error parsing guild_upgrades:", error);
+            upgrades = [];
+        }
+
+        // ✅ Check if the guild has enough currency
+        if (guild_gems < cost) {
+            return res.status(400).send({ message: "Not enough currency" });
+        }
+
+        // ✅ Find existing upgrade
+        const existingUpgrade = upgrades.find(upgrade => upgrade.type === upgradeType);
+
+        if (existingUpgrade) {
+            // Check if the upgrade is already at level 5
+            if (existingUpgrade.level >= 5) {
+                return res.status(400).send({ message: "Upgrade is already at maximum level (5)" });
+            }
+            // Increment level if upgrade already exists and is not maxed out
+            existingUpgrade.level += 1;
+        } else {
+            // Add new upgrade if it doesn't exist, starting at level 1
+            upgrades.push({ type: upgradeType, level: 1 });
+        }
+
+        const newCurrency = guild_gems - cost;
+
+        // ✅ Save the array of objects back to the database
+        const upgradesJSON = JSON.stringify(upgrades);
+
+        await db.query(`
+            UPDATE guilds 
+            SET guild_gems = ?, guild_upgrades = ? 
+            WHERE name = ?
+        `, [newCurrency, upgradesJSON, guildName]);
+
+        res.status(200).send({
+            message: "Guild upgraded successfully",
+            guildName,
+            newCurrency,
+            upgrades
+        });
+
+    } catch (error) {
+        console.error("Error upgrading guild:", error);
+        res.status(500).send({ message: "Internal server error" });
+    }
+});
+
+app.post('/donate-gold', async (req, res) => {
+    try {
+        const { userId, guildName, amount } = req.body;
+
+        if (!userId || !guildName || !amount || amount <= 0) {
+            return res.status(400).json({ error: 'User ID, guild name, and a valid donation amount are required' });
+        }
+
+        const conversionRate = 10000;
+
+        // Fetch user data including the username
+        const userQuery = 'SELECT username, currency FROM users WHERE id = ?';
+        const [userResult] = await db.query(userQuery, [userId]);
+
+        if (userResult.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const { username, currency } = userResult[0];
+
+        // Check if the user has enough currency
+        if (currency < amount) {
+            return res.status(400).json({ error: 'Insufficient currency to donate' });
+        }
+
+        // Deduct the donation amount from the user's currency
+        const updateUserCurrencyQuery = 'UPDATE users SET currency = currency - ? WHERE id = ?';
+        await db.query(updateUserCurrencyQuery, [amount, userId]);
+
+        // Fetch the current guild data
+        const guildQuery = 'SELECT gold_collected, guild_gems FROM guilds WHERE name = ?';
+        const [guildResult] = await db.query(guildQuery, [guildName]);
+
+        if (guildResult.length === 0) {
+            return res.status(404).json({ error: 'Guild not found' });
+        }
+
+        let goldCollected = [];
+        try {
+            goldCollected = JSON.parse(guildResult[0].gold_collected) || [];
+        } catch (error) {
+            console.error('Error parsing gold_collected:', error);
+        }
+
+        let existingDonor;
+        // Check if the user already donated before
+        if(goldCollected.length > 0){
+            existingDonor = goldCollected.find(d => d.userId === userId);
+        }
+        
+        if (existingDonor) {
+            existingDonor.gold += amount;  // Add gold to existing donor
+        }else{
+            goldCollected.push({ userId: userId, username: username, gold: amount });
+        }
+
+        // Calculate total gold in guild after donation
+        let currentGold = goldCollected.reduce((acc, donation) => acc + donation.gold, 0);
+
+        // Calculate gem conversion
+        const gemsToAdd = Math.floor(currentGold / conversionRate);
+        const totalGems = guildResult[0].guild_gems + gemsToAdd
+        const remainingGold = currentGold % conversionRate;
+
+        // Update the guild with the new data
+        const updateGuildQuery = `
+            UPDATE guilds 
+            SET gold_collected = ?, guild_gems = ?
+            WHERE name = ?`;
+        await db.query(updateGuildQuery, [JSON.stringify(goldCollected), totalGems, guildName]);
+
+        res.status(200).json({
+            message: `Donation successful. ${gemsToAdd} gem(s) added.`,
+            guild_gems: gemsToAdd,
+            remaining_gold: remainingGold
+        });
+
+    } catch (error) {
+        console.error('Error donating gold:', error);
+        res.status(500).json({ error: 'Failed to donate gold' });
+    }
+});
+
+
+
+
+
 
 
   
