@@ -3071,7 +3071,7 @@ app.post('/create-guild', async (req, res) => {
             JSON.stringify(members), // Store members array as JSON
             JSON.stringify([]), // Empty group_quests
             created_at,
-            privacy,
+            privacy || 'public',
             JSON.stringify([]), // Empty request_list
             20
         ]);
