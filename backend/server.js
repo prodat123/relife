@@ -3149,7 +3149,7 @@ app.post('/join-guild', async (req, res) => {
         } else {
             // If private, add user to the request list
             if (!request_list.some(req => req.userId === userId)) {
-                request_list.push({ userId, username: username });
+                request_list.push({ userId, username: userGuildResult[0].username });
             }
 
             // Update the guild with the new request list
