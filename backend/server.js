@@ -396,8 +396,11 @@ app.post('/quests/select', async (req, res) => {
             const guildUpgrades = JSON.parse(guild[0].guild_upgrades);
 
             // Separate upgrades by type
-            extraSlots = guildUpgrades.filter(u => u.type === 'extraSlots')[0].level * 2 || 0;
-            questTimerBuff = guildUpgrades.filter(u => u.type === 'questTimerBuff')[0].level * 5 || 0;        
+            if(guildUpgrades.length > 0){
+                extraSlots = guildUpgrades.filter(u => u.type === 'extraSlots')[0].level * 2 || 0;
+                questTimerBuff = guildUpgrades.filter(u => u.type === 'questTimerBuff')[0].level * 5 || 0;   
+            }
+                 
             
         }
 
@@ -618,8 +621,10 @@ app.post('/quests/finish', async (req, res) => {
             }
     
             const guildUpgrades = JSON.parse(guild[0].guild_upgrades);
-    
-            xpBoost = guildUpgrades.filter(u => u.type === 'xpBoost')[0].level * 8 || 0;
+
+            if(guildUpgrades.length > 0){
+                xpBoost = guildUpgrades.filter(u => u.type === 'xpBoost')[0].level * 8 || 0;
+            }
         }
 
         
