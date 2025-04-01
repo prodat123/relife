@@ -3017,29 +3017,34 @@ app.get("/user-guild", async (req, res) => {
 
 app.post('/create-guild', async (req, res) => {
     try {
-        const { name, username, description, privacy, created_by } = req.body;
+        const { name, description, privacy, created_by } = req.body;
 
         // Validate required fields
         if (!name || !description || !privacy || !created_by) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        // Check if the user exists and fetch their currency balance
-        const userCheckQuery = 'SELECT currency FROM users WHERE id = ?';
+        // Fetch user data: currency, guild, and username
+        const userCheckQuery = 'SELECT currency, guild, username FROM users WHERE id = ?';
         const [userResult] = await db.query(userCheckQuery, [created_by]);
 
         if (userResult.length === 0) {
             return res.status(404).json({ error: 'User does not exist' });
         }
 
-        const userGold = userResult[0].currency;
+        const { currency: userGold, guild, username } = userResult[0];
 
-        // Check if the user has at least 20000 gold
-        if (userGold < 20000) {
-            return res.status(403).json({ error: 'Insufficient gold. You need at least 20000 gold to create a guild.' });
+        // Check if the user is already in a guild
+        if (guild && guild.trim() !== '') {
+            return res.status(403).json({ error: 'You are already in a guild and cannot create another one.' });
         }
 
-        // Deduct 20,000 gold from user's balance
+        // Check if the user has at least 50,000 gold
+        if (userGold < 50000) {
+            return res.status(403).json({ error: 'Insufficient gold. You need at least 50,000 gold to create a guild.' });
+        }
+
+        // Deduct 50,000 gold from user's balance and set guild name
         const newBalance = userGold - 50000;
         const updateUserCurrencyQuery = 'UPDATE users SET currency = ?, guild = ? WHERE id = ?';
         await db.query(updateUserCurrencyQuery, [newBalance, name, created_by]);
@@ -3054,7 +3059,7 @@ app.post('/create-guild', async (req, res) => {
 
         // Prepare members array with the creator as an admin
         const created_at = new Date();
-        const members = [{ userId: created_by, username: username,  role: "admin" }];
+        const members = [{ userId: created_by, username, role: "admin" }];
 
         // Insert new guild into the database
         const sql = `INSERT INTO guilds (name, description, members, group_quests, created_at, privacy, request_list, guild_gems) 
@@ -3079,11 +3084,12 @@ app.post('/create-guild', async (req, res) => {
     }
 });
 
+
 app.post('/join-guild', async (req, res) => {
     try {
-        const { name, userId, username } = req.body;
+        const { name, userId } = req.body;
 
-        if (!name || !userId || !username) {
+        if (!name || !userId) {
             return res.status(400).json({ error: 'Guild name, userId, and username are required' });
         }
 
@@ -3096,7 +3102,7 @@ app.post('/join-guild', async (req, res) => {
         }
 
         // Check if the user is already in another guild
-        const userGuildCheckQuery = 'SELECT guild FROM users WHERE id = ?';
+        const userGuildCheckQuery = 'SELECT username, guild FROM users WHERE id = ?';
         const [userGuildResult] = await db.query(userGuildCheckQuery, [userId]);
 
         if (userGuildResult[0].guild) {
@@ -3129,7 +3135,7 @@ app.post('/join-guild', async (req, res) => {
 
         if (privacy === "public") {
             // If public, add user immediately
-            members.push({ userId, username: username, role: "member" });
+            members.push({ userId, username: userGuildResult[0].username, role: "member" });
 
             // Update the guild with new members
             const updateGuildQuery = 'UPDATE guilds SET members = ? WHERE name = ?';
