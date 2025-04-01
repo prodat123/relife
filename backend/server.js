@@ -3119,6 +3119,10 @@ app.post('/join-guild', async (req, res) => {
 
         let { members, request_list, privacy } = guildResult[0];
 
+        if (!privacy || (privacy !== 'public' && privacy !== 'private')) {
+            return res.status(500).json({ error: 'Guild privacy setting is invalid' });
+        }
+
         // Parse JSON fields
         members = JSON.parse(members);
         request_list = JSON.parse(request_list);
@@ -3146,7 +3150,7 @@ app.post('/join-guild', async (req, res) => {
             await db.query(updateUserQuery, [name, userId]);
 
             return res.status(200).json({ message: 'User successfully joined the guild' });
-        } else {
+        } else if (privacy === "private") {
             // If private, add user to the request list
             if (!request_list.some(req => req.userId === userId)) {
                 request_list.push({ userId, username: userGuildResult[0].username });
