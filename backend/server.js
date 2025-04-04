@@ -404,10 +404,6 @@ app.post('/quests/select', async (req, res) => {
             
         }
 
-        
-
-        
-
         // Check active quests
         const now = new Date();
         const datetime = now.toISOString().slice(0, 19).replace('T', ' ');       
@@ -418,8 +414,8 @@ app.post('/quests/select', async (req, res) => {
             WHERE user_id = ? AND expired_at > ?
         `, [userId, now]);
 
-        if (activeQuests[0].activeCount >= (8 + extraSlots)) {
-            return res.status(400).json({ error: `You already have ${8 + extraSlots} active quests` });
+        if (activeQuests[0].activeCount >= (4 + extraSlots)) {
+            return res.status(400).json({ error: `You already have ${4 + extraSlots} active quests` });
         }
 
         // Get quest difficulty
@@ -436,7 +432,8 @@ app.post('/quests/select', async (req, res) => {
         const difficulty = quest[0].difficulty;
 
         // Calculate expired_at based on difficulty
-        const expirationMinutes = (difficulty * 20) - questTimerBuff;
+        const questTimer = 30;
+        const expirationMinutes = (difficulty * questTimer) - questTimerBuff;
         const expiredAt = new Date(now.getTime() + expirationMinutes * 60 * 1000);
 
         // Check if the user is already a participant in this quest
@@ -600,11 +597,15 @@ app.get('/quests/completed', async (req, res) => {
 app.post('/quests/finish', async (req, res) => {
     const { questId, userId } = req.body;
 
+    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+
     try {
         const [userExists] = await db.query('SELECT id, guild FROM users WHERE id = ?', [userId]);
         if (userExists.length === 0) {
             return res.status(400).json({ error: 'User does not exist' });
         }
+
+        
 
         const guildName = userExists[0].guild;
 
@@ -627,6 +628,8 @@ app.post('/quests/finish', async (req, res) => {
             }
         }
 
+
+
         
 
         const completionDate = new Date().toISOString().split('T')[0];
@@ -636,8 +639,18 @@ app.post('/quests/finish', async (req, res) => {
             `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ? AND completed = 1 AND completed_at = ?`,
             [questId, userId, completionDate]
         );
+
         if (existing.length > 0) {
             return res.status(400).json({ error: 'Quest already completed today.' });
+        }
+
+        const [claimable] = await db.query(
+            `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ? AND expired_at < ?`,
+            [questId, userId, now]
+        );
+
+        if(claimable.length === 0){
+            return res.status(400).json({ error: 'Quest is not ready to be claimed' });
         }
 
         // Retrieve the quest's rewards (experience, item, and stat rewards)
@@ -3519,18 +3532,25 @@ app.post('/finish-guild-quest', async (req, res) => {
         let members = JSON.parse(guild[0].members || '[]');
         let guildGems = guild[0].guild_gems;
 
-        // Ensure claimedMembers array exists
-        if (!groupQuests[0].claimedMembers) {
-            groupQuests[0].claimedMembers = [];
+        // Find the quest in the group_quests array based on questId
+        const questToUpdate = groupQuests.find(q => q.id === questId);
+
+        if (!questToUpdate) {
+            return res.status(404).json({ error: 'Quest not found in group quests.' });
         }
 
-        if (!groupQuests[0].claimedMembers.includes(userId)) {
-            groupQuests[0].claimedMembers.push(userId);
+        // Ensure claimedMembers array exists
+        if (!questToUpdate.claimedMembers) {
+            questToUpdate.claimedMembers = [];
+        }
+
+        if (!questToUpdate.claimedMembers.includes(userId)) {
+            questToUpdate.claimedMembers.push(userId);
         }
 
         // Check if all members have claimed the quest
         const allClaimed = members.every(member => 
-            groupQuests[0].claimedMembers.includes(member.userId)
+            questToUpdate.claimedMembers.includes(member.userId)
         );
 
         if (allClaimed) {
@@ -3540,7 +3560,7 @@ app.post('/finish-guild-quest', async (req, res) => {
             }
 
             // Remove the quest from group_quests
-            groupQuests = groupQuests.filter(quest => quest.id !== questId);
+            groupQuests = groupQuests.filter(q => q.id !== questId);
         }
 
         // Save the updated group_quests and guild_gems
@@ -3563,6 +3583,7 @@ app.post('/finish-guild-quest', async (req, res) => {
         res.status(500).json({ error: 'Failed to mark quest as finished.' });
     }
 });
+
 
 
 app.post('/guild-upgrade', async (req, res) => {
