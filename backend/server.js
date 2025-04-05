@@ -55,25 +55,44 @@ app.post('/auth/signup', async (req, res) => {
         endurance: 1,
     });
 
-    if (recaptchaToken.length < 40) {
+    if (!recaptchaToken || recaptchaToken.length < 40) {
         return res.status(400).json({ message: 'reCAPTCHA token is missing' });
     }
 
     try {
-        const [result] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
-        if (result.length > 0) {
+        // Check if username already exists
+        const [existing] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
+        if (existing.length > 0) {
             return res.status(400).json({ message: 'Username already exists' });
         }
 
+        // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10);
         const joinedAt = new Date().toISOString().slice(0, 10);
 
+        // Insert the user
         await db.query(
             'INSERT INTO users (username, email, age, password, experience, stats, joined_at, head, torso, legs, feet) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [username, email, age, hashedPassword, 0, defaultStats, joinedAt, '', '', '', '']
         );
 
-        res.status(201).json({ message: 'User created successfully', username });
+        // Fetch the newly inserted user
+        const [result] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
+        const user = result[0];
+
+        res.status(200).json({
+            message: 'Login successful',
+            id: user.id,
+            username: user.username,
+            experience: user.experience,
+            stats: JSON.parse(user.stats),
+            head: user.head,
+            torso: user.torso,  // Make sure the column name is correct
+            legs: user.legs,
+            feet: user.feet,
+            weapon: user.weapon || null,
+            currency: user.currency || 0,
+        });
     } catch (error) {
         console.error('Error during signup:', error);
         res.status(500).json({ message: 'Error signing up' });
@@ -396,10 +415,16 @@ app.post('/quests/select', async (req, res) => {
             const guildUpgrades = JSON.parse(guild[0].guild_upgrades);
 
             // Separate upgrades by type
-            if(guildUpgrades.length > 0){
-                extraSlots = guildUpgrades.filter(u => u.type === 'extraSlots')[0].level * 2 || 0;
-                questTimerBuff = guildUpgrades.filter(u => u.type === 'questTimerBuff')[0].level * 5 || 0;   
+            if (guildUpgrades.length > 0) {
+                const extraSlotsUpgrade = guildUpgrades.find(u => u.type === 'extraSlots');
+                const questTimerBuffUpgrade = guildUpgrades.find(u => u.type === 'questTimerBuff');
+            
+                extraSlots = extraSlotsUpgrade ? extraSlotsUpgrade.level * 2 : 0;
+                questTimerBuff = questTimerBuffUpgrade ? questTimerBuffUpgrade.level * 5 : 0;
+            
+                console.log(questTimerBuff);
             }
+            
                  
             
         }
@@ -623,21 +648,17 @@ app.post('/quests/finish', async (req, res) => {
     
             const guildUpgrades = JSON.parse(guild[0].guild_upgrades);
 
-            if(guildUpgrades.length > 0){
-                xpBoost = guildUpgrades.filter(u => u.type === 'xpBoost')[0].level * 8 || 0;
+            if (guildUpgrades.length > 0) {
+                const xpBoostUpgrade = guildUpgrades.find(u => u.type === 'xpBoost');
+                xpBoost = xpBoostUpgrade ? xpBoostUpgrade.level * 8 : 0;
             }
+            
         }
-
-
-
-        
-
-        const completionDate = new Date().toISOString().split('T')[0];
 
         // Check if the quest is already completed today
         const [existing] = await db.query(
             `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ? AND completed = 1 AND completed_at = ?`,
-            [questId, userId, completionDate]
+            [questId, userId, now]
         );
 
         if (existing.length > 0) {
@@ -669,7 +690,7 @@ app.post('/quests/finish', async (req, res) => {
             `UPDATE quest_participants
              SET completed = 1, completed_at = ?
              WHERE quest_id = ? AND user_id = ?`,
-            [completionDate, questId, userId]
+            [now, questId, userId]
         );
 
         let boostedExperienceReward = experienceReward + xpBoost;
