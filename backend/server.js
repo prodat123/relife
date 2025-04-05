@@ -454,6 +454,7 @@ app.post('/quests/select', async (req, res) => {
         const activeCount = activeQuests.length;
 
         if (activeCount >= maxQuestSlots) {
+            await db.rollback();
             return res.status(400).json({
                 error: `You already have ${activeCount} active quests. Maximum allowed is ${maxQuestSlots}.`
             });
