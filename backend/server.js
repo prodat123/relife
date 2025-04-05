@@ -390,131 +390,118 @@ app.post('/quests/select', async (req, res) => {
         return res.status(400).json({ error: 'Quest ID and User ID are required' });
     }
 
+    const connection = await db.getConnection();
+    await connection.beginTransaction();
+
     try {
-        // Check if the user exists
-        const [userExists] = await db.query('SELECT id, guild FROM users WHERE id = ?', [userId]);
+        // Lock the user row to prevent race conditions
+        const [userExists] = await connection.query(
+            'SELECT id, guild FROM users WHERE id = ? FOR UPDATE',
+            [userId]
+        );
         if (userExists.length === 0) {
+            await connection.rollback();
             return res.status(400).json({ error: 'User does not exist' });
         }
 
         const guildName = userExists[0].guild;
-
         let extraSlots = 0;
         let questTimerBuff = 0;
+
         if (guildName) {
-            const [guild] = await db.query(`
-                SELECT guild_upgrades 
-                FROM guilds 
-                WHERE name = ?
-            `, [guildName]);
-    
+            const [guild] = await connection.query(
+                'SELECT guild_upgrades FROM guilds WHERE name = ? FOR UPDATE',
+                [guildName]
+            );
+
             if (guild.length === 0) {
+                await connection.rollback();
                 return res.status(404).json({ error: 'Guild not found' });
             }
 
-            const guildUpgrades = JSON.parse(guild[0].guild_upgrades);
+            const guildUpgrades = JSON.parse(guild[0].guild_upgrades || '[]');
+            const extraSlotsUpgrade = guildUpgrades.find(u => u.type === 'extraSlots');
+            const questTimerBuffUpgrade = guildUpgrades.find(u => u.type === 'questTimerBuff');
 
-            // Separate upgrades by type
-            if (guildUpgrades.length > 0) {
-                const extraSlotsUpgrade = guildUpgrades.find(u => u.type === 'extraSlots');
-                const questTimerBuffUpgrade = guildUpgrades.find(u => u.type === 'questTimerBuff');
-            
-                extraSlots = extraSlotsUpgrade ? extraSlotsUpgrade.level * 2 : 0;
-                questTimerBuff = questTimerBuffUpgrade ? questTimerBuffUpgrade.level * 5 : 0;
-            }
-            
-                 
-            
+            extraSlots = extraSlotsUpgrade ? extraSlotsUpgrade.level * 2 : 0;
+            questTimerBuff = questTimerBuffUpgrade ? questTimerBuffUpgrade.level * 5 : 0;
         }
 
-        // Check active quests
+        // Count active quests using FOR UPDATE to lock quest participation rows
         const now = new Date();
-        const datetime = now.toISOString().slice(0, 19).replace('T', ' ');       
+        const datetime = now.toISOString().slice(0, 19).replace('T', ' ');
 
-        // const [activeQuests] = await db.query(`
-        //     SELECT COUNT(*) AS activeCount 
-        //     FROM quest_participants 
-        //     WHERE user_id = ? AND expired_at > ?
-        // `, [userId, now]);
+        const [activeQuests] = await connection.query(
+            'SELECT id FROM quest_participants WHERE user_id = ? AND expired_at > ? FOR UPDATE',
+            [userId, now]
+        );
 
-        // if (activeQuests[0].activeCount >= (4 + extraSlots)) {
-        //     return res.status(400).json({ error: `You already have ${4 + extraSlots} active quests` });
-        // }
-
-        // Default slot limit is 4
-        const maxQuestSlots = 4 + (Number.isInteger(extraSlots) ? extraSlots : 0);
-
-        // Check active quests strictly
-        const [activeQuests] = await db.query(`
-            SELECT id, quest_id, expired_at 
-            FROM quest_participants 
-            WHERE user_id = ? AND expired_at > ?
-        `, [userId, now]);
-
-        const activeCount = activeQuests.length;
-
-        if (activeCount >= maxQuestSlots) {
-            await db.rollback();
-            return res.status(400).json({
-                error: `You already have ${activeCount} active quests. Maximum allowed is ${maxQuestSlots}.`
-            });
-        }
-        // Get quest difficulty
-        const [quest] = await db.query(`
-            SELECT difficulty 
-            FROM quests 
-            WHERE id = ?
-        `, [questId]);
-
-        if (quest.length === 0) {
-            return res.status(404).json({ error: 'Quest not found' });
+        const maxSlots = 4 + extraSlots;
+        if (activeQuests.length >= maxSlots) {
+            await connection.rollback();
+            return res.status(400).json({ error: `You already have ${maxSlots} active quests.` });
         }
 
-        const difficulty = quest[0].difficulty;
-
-        // Calculate expired_at based on difficulty
-        const questTimer = 30;
-        const expirationMinutes = (difficulty * questTimer) - questTimerBuff;
-        const expiredAt = new Date(now.getTime() + expirationMinutes * 60 * 1000);
-
-        // Check if the user is already a participant in this quest
-        const [existingParticipant] = await db.query(
-            'SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ?',
+        // Prevent starting the same quest twice
+        const [existing] = await connection.query(
+            'SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ? FOR UPDATE',
             [questId, userId]
         );
 
-        if (existingParticipant.length > 0) {
-            if (existingParticipant[0].progress === 'Started') {
+        if (existing.length > 0) {
+            if (existing[0].progress === 'Started') {
+                await connection.rollback();
                 return res.status(200).json({ message: 'Quest already started by this user' });
             }
 
-            // Update progress to 'Started' and set timestamps
-            await db.query(
+            // Update progress to 'Started'
+            const [quest] = await connection.query(
+                'SELECT difficulty FROM quests WHERE id = ?',
+                [questId]
+            );
+            const difficulty = quest[0]?.difficulty || 1;
+            const expirationMinutes = (difficulty * 30) - questTimerBuff;
+            const expiredAt = new Date(now.getTime() + expirationMinutes * 60 * 1000);
+
+            await connection.query(
                 `UPDATE quest_participants 
                  SET progress = ?, joined_at = ?, joined_at_datetime = ?, expired_at = ?, completed = ? 
                  WHERE id = ?`,
-                ['Started', currentDate, datetime, expiredAt, false, existingParticipant[0].id]
+                ['Started', currentDate, datetime, expiredAt, false, existing[0].id]
             );
 
+            await connection.commit();
             return res.status(200).json({ message: 'Quest progress updated to Started' });
         }
 
-        // Add the user as a new participant
-        await db.query(
+        // Start a new quest
+        const [quest] = await connection.query(
+            'SELECT difficulty FROM quests WHERE id = ?',
+            [questId]
+        );
+        const difficulty = quest[0]?.difficulty || 1;
+        const expirationMinutes = (difficulty * 30) - questTimerBuff;
+        const expiredAt = new Date(now.getTime() + expirationMinutes * 60 * 1000);
+
+        await connection.query(
             `INSERT INTO quest_participants 
              (quest_id, user_id, progress, completed, joined_at, expired_at, completed_at, joined_at_datetime) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-
             [questId, userId, 'Started', false, currentDate, expiredAt, null, datetime]
         );
 
-        res.status(201).json({ message: `User added as participant with progress Started, expires in ${expirationMinutes} minutes` });
+        await connection.commit();
+        return res.status(201).json({ message: `Quest started, expires in ${expirationMinutes} minutes.` });
 
-    } catch (error) {
-        console.error('Error selecting quest:', error);
-        res.status(500).json({ error: 'An error occurred while selecting the quest.' });
+    } catch (err) {
+        await connection.rollback();
+        console.error('Error selecting quest:', err);
+        return res.status(500).json({ error: 'An error occurred while selecting the quest.' });
+    } finally {
+        connection.release();
     }
 });
+
 
 
 
