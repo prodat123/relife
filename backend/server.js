@@ -3585,11 +3585,13 @@ app.post('/finish-guild-quest', async (req, res) => {
 });
 
 app.post('/guild-upgrade', async (req, res) => {
-    const { guildName, upgradeType, cost, userId } = req.body;  // Include userId in request
+    const { guildName, upgradeType, userId } = req.body;  // Include userId in request
 
-    if (!guildName || !upgradeType || !cost || !userId) {
+    if (!guildName || !upgradeType || !userId) {
         return res.status(400).send({ message: "Missing required fields" });
     }
+
+    const cost = 25;
 
     try {
         // ✅ Check if the user is an admin
