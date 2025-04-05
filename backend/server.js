@@ -3584,8 +3584,6 @@ app.post('/finish-guild-quest', async (req, res) => {
     }
 });
 
-
-
 app.post('/guild-upgrade', async (req, res) => {
     const { guildName, upgradeType, cost, userId } = req.body;  // Include userId in request
 
@@ -3695,13 +3693,16 @@ app.post('/donate-gold', async (req, res) => {
         const { username, currency } = userResult[0];
 
         // Check if the user has enough currency
-        if (currency < amount) {
-            return res.status(400).json({ error: 'Insufficient currency to donate' });
+        const updateUserCurrencyQuery = `
+        UPDATE users 
+        SET currency = currency - ? 
+        WHERE id = ? AND currency >= ?`;
+        const [updateResult] = await db.query(updateUserCurrencyQuery, [amount, userId, amount]);
+
+        if (updateResult.affectedRows === 0) {
+        return res.status(400).json({ error: 'Insufficient currency to donate' });
         }
 
-        // Deduct the donation amount from the user's currency
-        const updateUserCurrencyQuery = 'UPDATE users SET currency = currency - ? WHERE id = ?';
-        await db.query(updateUserCurrencyQuery, [amount, userId]);
 
         // Fetch the current guild data, now including unconverted_gold
         const guildQuery = 'SELECT gold_collected, guild_gems, unconverted_gold FROM guilds WHERE name = ?';
