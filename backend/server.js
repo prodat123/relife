@@ -421,8 +421,6 @@ app.post('/quests/select', async (req, res) => {
             
                 extraSlots = extraSlotsUpgrade ? extraSlotsUpgrade.level * 2 : 0;
                 questTimerBuff = questTimerBuffUpgrade ? questTimerBuffUpgrade.level * 5 : 0;
-            
-                console.log(questTimerBuff);
             }
             
                  
@@ -433,16 +431,33 @@ app.post('/quests/select', async (req, res) => {
         const now = new Date();
         const datetime = now.toISOString().slice(0, 19).replace('T', ' ');       
 
+        // const [activeQuests] = await db.query(`
+        //     SELECT COUNT(*) AS activeCount 
+        //     FROM quest_participants 
+        //     WHERE user_id = ? AND expired_at > ?
+        // `, [userId, now]);
+
+        // if (activeQuests[0].activeCount >= (4 + extraSlots)) {
+        //     return res.status(400).json({ error: `You already have ${4 + extraSlots} active quests` });
+        // }
+
+        // Default slot limit is 4
+        const maxQuestSlots = 4 + (Number.isInteger(extraSlots) ? extraSlots : 0);
+
+        // Check active quests strictly
         const [activeQuests] = await db.query(`
-            SELECT COUNT(*) AS activeCount 
+            SELECT id, quest_id, expired_at 
             FROM quest_participants 
             WHERE user_id = ? AND expired_at > ?
         `, [userId, now]);
 
-        if (activeQuests[0].activeCount >= (4 + extraSlots)) {
-            return res.status(400).json({ error: `You already have ${4 + extraSlots} active quests` });
-        }
+        const activeCount = activeQuests.length;
 
+        if (activeCount >= maxQuestSlots) {
+            return res.status(400).json({
+                error: `You already have ${activeCount} active quests. Maximum allowed is ${maxQuestSlots}.`
+            });
+        }
         // Get quest difficulty
         const [quest] = await db.query(`
             SELECT difficulty 
