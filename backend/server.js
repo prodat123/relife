@@ -1786,8 +1786,6 @@ app.get('/tower-floor', async (req, res) => {
 });
 
 
-
-
 app.get('/tower-leaderboard', async (req, res) => {
     try {
         const [leaderboard] = await db.query('SELECT * FROM tower_leaderboard ORDER BY floor DESC');
@@ -1854,8 +1852,6 @@ app.post('/add-to-tower-leaderboard', async (req, res) => {
         res.status(500).json({ message: 'Failed to interact with the database', error });
     }
 });
-
-
 
 
 app.post('/vows', async (req, res) => {
@@ -2613,16 +2609,16 @@ app.post('/garden/harvest', async (req, res) => {
             `SELECT * FROM player_garden WHERE id = ? AND player_id = ?`, 
             [gardenId, userId]
         );
-        
+
         if (plantRows.length === 0) {
-            return res.status(400).json({ error: "Plant not ready for harvest" });
+            return res.status(400).json({ error: "Plant not found in garden" });
         }
 
         const plant = plantRows[0];
 
-        // Fetch the corresponding seed data
+        // Fetch the corresponding seed data (now includes growth_time)
         const [seedRows] = await db.query(
-            `SELECT id, name, material FROM seeds WHERE id = ?`, 
+            `SELECT id, name, material, growth_time FROM seeds WHERE id = ?`, 
             [plant.seed_id]
         );
 
@@ -2631,6 +2627,11 @@ app.post('/garden/harvest', async (req, res) => {
         }
 
         const seed = seedRows[0];
+
+        // Check if plant is fully grown
+        if (plant.total_progress < seed.growth_time) {
+            return res.status(400).json({ error: "Plant is not fully grown yet!" });
+        }
 
         // Fetch the user's current inventory
         const [userRows] = await db.query(`SELECT inventory FROM users WHERE id = ?`, [userId]);
@@ -2641,28 +2642,26 @@ app.post('/garden/harvest', async (req, res) => {
 
         let inventory = JSON.parse(userRows[0].inventory || '[]'); // Ensure it's an array
 
-        // Check if the seed already exists in the inventory
+        // Add seed to inventory
         let seedItem = inventory.find(item => item.id === seed.id && item.type === 'seed');
-
         if (seedItem) {
-            seedItem.quantity += 1; // Increase seed quantity
+            seedItem.quantity += 1;
         } else {
             inventory.push({ id: seed.id, name: seed.name, type: 'seed', quantity: 1 });
         }
 
-        // Add the harvested material
+        // Add harvested material
         let materialItem = inventory.find(item => item.name === seed.material && item.type === 'material');
-
         if (materialItem) {
             materialItem.quantity += 1;
         } else {
             inventory.push({ name: seed.material, type: 'material', quantity: 1 });
         }
 
-        // Update the user's inventory in the database
+        // Update inventory in DB
         await db.query(`UPDATE users SET inventory = ? WHERE id = ?`, [JSON.stringify(inventory), userId]);
 
-        // Remove the plant from the garden
+        // Remove plant from garden
         await db.query(`DELETE FROM player_garden WHERE id = ?`, [gardenId]);
 
         res.json({ message: `You received 1 ${seed.name} seed and 1 ${seed.material}!` });
@@ -2672,6 +2671,7 @@ app.post('/garden/harvest', async (req, res) => {
         res.status(500).json({ error: "Failed to harvest plant" });
     }
 });
+
 
 app.get('/seeds', async (req, res) => {
     const { id } = req.params;  // Get the itemId from the request parameter
@@ -3703,8 +3703,8 @@ app.post('/donate-gold', async (req, res) => {
         const updateUserCurrencyQuery = 'UPDATE users SET currency = currency - ? WHERE id = ?';
         await db.query(updateUserCurrencyQuery, [amount, userId]);
 
-        // Fetch the current guild data
-        const guildQuery = 'SELECT gold_collected, guild_gems FROM guilds WHERE name = ?';
+        // Fetch the current guild data, now including unconverted_gold
+        const guildQuery = 'SELECT gold_collected, guild_gems, unconverted_gold FROM guilds WHERE name = ?';
         const [guildResult] = await db.query(guildQuery, [guildName]);
 
         if (guildResult.length === 0) {
@@ -3718,37 +3718,36 @@ app.post('/donate-gold', async (req, res) => {
             console.error('Error parsing gold_collected:', error);
         }
 
-        let existingDonor;
-        // Check if the user already donated before
-        if(goldCollected.length > 0){
-            existingDonor = goldCollected.find(d => d.userId === userId);
-        }
-        
+        let unconvertedGold = guildResult[0].unconverted_gold || 0;
+
+        // Update or add donor info
+        let existingDonor = goldCollected.find(d => d.userId === userId);
         if (existingDonor) {
-            existingDonor.gold += amount;  // Add gold to existing donor
-        }else{
+            existingDonor.gold += amount;
+        } else {
             goldCollected.push({ userId: userId, username: username, gold: amount });
         }
 
-        // Calculate total gold in guild after donation
-        let currentGold = goldCollected.reduce((acc, donation) => acc + donation.gold, 0);
+        // Add the newly donated amount to unconvertedGold
+        unconvertedGold += amount;
 
-        // Calculate gem conversion
-        const gemsToAdd = Math.floor(currentGold / conversionRate);
-        const totalGems = guildResult[0].guild_gems + gemsToAdd
-        const remainingGold = currentGold % conversionRate;
+        // Calculate how many new gems should be awarded
+        const gemsToAdd = Math.floor(unconvertedGold / conversionRate);
+        unconvertedGold = unconvertedGold % conversionRate;
 
-        // Update the guild with the new data
+        const totalGems = guildResult[0].guild_gems + gemsToAdd;
+
+        // Update the guild with new data
         const updateGuildQuery = `
             UPDATE guilds 
-            SET gold_collected = ?, guild_gems = ?
+            SET gold_collected = ?, guild_gems = ?, unconverted_gold = ?
             WHERE name = ?`;
-        await db.query(updateGuildQuery, [JSON.stringify(goldCollected), totalGems, guildName]);
+        await db.query(updateGuildQuery, [JSON.stringify(goldCollected), totalGems, unconvertedGold, guildName]);
 
         res.status(200).json({
             message: `Donation successful. ${gemsToAdd} gem(s) added.`,
-            guild_gems: gemsToAdd,
-            remaining_gold: remainingGold
+            guild_gems: totalGems,
+            remaining_gold: unconvertedGold
         });
 
     } catch (error) {
@@ -3756,6 +3755,7 @@ app.post('/donate-gold', async (req, res) => {
         res.status(500).json({ error: 'Failed to donate gold' });
     }
 });
+
 
 
 
