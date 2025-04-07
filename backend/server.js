@@ -604,15 +604,16 @@ app.get('/quests/completed', async (req, res) => {
 
         
         // Get the current date (formatted as 'YYYY-MM-DD')
-        const now = new Date();
-        const currentDate = now.toISOString().slice(0, 19).replace('T', ' ');
+       
+        const currentDate = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+        console.log(currentDate);
         // const currentDate = new Date().toLocaleDateString('en-CA');  // 'YYYY-MM-DD'
         // Query to fetch completed quests for the given user where completed = true and completed_at is today
         const [completedQuests] = await db.query(
             `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, q.name, q.description, qp.completed_at 
              FROM quest_participants qp
              INNER JOIN quests q ON qp.quest_id = q.id
-             WHERE qp.user_id = ? AND qp.completed = 1 AND qp.completed_at = ?`,
+             WHERE qp.user_id = ? AND qp.completed = 1 AND DATE(qp.completed_at) = ?`,
             [userId, currentDate]  // Use the currentDate for filtering
         );
         // Return the completed quests
