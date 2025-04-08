@@ -386,6 +386,8 @@ app.get('/quest/:id', async (req, res) => {
 app.post('/quests/select', async (req, res) => {
     const { questId, userId, currentDate } = req.body;
 
+    const formattedDate = new Date(currentDate);
+
     if (!questId || !userId) {
         return res.status(400).json({ error: 'Quest ID and User ID are required' });
     }
@@ -428,12 +430,11 @@ app.post('/quests/select', async (req, res) => {
         }
 
         // Count active quests using FOR UPDATE to lock quest participation rows
-        const now = new Date();
-        const datetime = now.toISOString().slice(0, 19).replace('T', ' ');
+        const datetime = new Date(currentDate).toISOString().slice(0, 19).replace('T', ' ');
 
         const [activeQuests] = await connection.query(
             'SELECT id FROM quest_participants WHERE user_id = ? AND expired_at > ? FOR UPDATE',
-            [userId, now]
+            [userId, formattedDate]
         );
 
         const maxSlots = 4 + extraSlots;
@@ -461,13 +462,13 @@ app.post('/quests/select', async (req, res) => {
             );
             const difficulty = quest[0]?.difficulty || 1;
             const expirationMinutes = (difficulty * 30) - questTimerBuff;
-            const expiredAt = new Date(now.getTime() + expirationMinutes * 60 * 1000);
+            const expiredAt = new Date(formattedDate.getTime() + expirationMinutes * 60 * 1000);
 
             await connection.query(
                 `UPDATE quest_participants 
                  SET progress = ?, joined_at = ?, joined_at_datetime = ?, expired_at = ?, completed = ? 
                  WHERE id = ?`,
-                ['Started', currentDate, datetime, expiredAt, false, existing[0].id]
+                ['Started', datetime, currentDate, expiredAt, false, existing[0].id]
             );
 
             await connection.commit();
@@ -481,13 +482,16 @@ app.post('/quests/select', async (req, res) => {
         );
         const difficulty = quest[0]?.difficulty || 1;
         const expirationMinutes = (difficulty * 30) - questTimerBuff;
-        const expiredAt = new Date(now.getTime() + expirationMinutes * 60 * 1000);
+        const expiredAt = new Date(formattedDate.getTime() + expirationMinutes * 60 * 1000);
+
+        console.log("Joined at: " + formattedDate);
+        console.log("Expired at: " + expiredAt);
 
         await connection.query(
             `INSERT INTO quest_participants 
              (quest_id, user_id, progress, completed, joined_at, expired_at, completed_at, joined_at_datetime) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [questId, userId, 'Started', false, currentDate, expiredAt, null, datetime]
+            [questId, userId, 'Started', false, datetime, expiredAt, null, formattedDate]
         );
 
         await connection.commit();
@@ -540,14 +544,14 @@ app.post('/quests/remove', async (req, res) => {
 
 // Fetch quests the user is participating in
 app.get('/quests/active', async (req, res) => {
-    const { userId } = req.query;
+    const { userId, date } = req.query;
     // const decryptedUserId = decryptUserId(userId);
 
     if (!userId) {
         return res.status(400).json({ error: 'User ID is required' });
     }
 
-    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const now = new Date(date).toISOString().slice(0, 19).replace("T", " ");
 
     try {
         const [activeQuests] = await db.query(
@@ -593,7 +597,7 @@ app.get('/quests/filled-slots/:userId', async (req, res) => {
 
 // Fetch completed quests the user has participated in
 app.get('/quests/completed', async (req, res) => {
-    const { userId } = req.query;
+    const { userId, date } = req.query;
 
     // Validate if the user ID is provided
     if (!userId) {
@@ -605,8 +609,7 @@ app.get('/quests/completed', async (req, res) => {
         
         // Get the current date (formatted as 'YYYY-MM-DD')
        
-        const currentDate = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
-        console.log(currentDate);
+        const currentDate = new Date(date).toISOString().slice(0, 10); // 'YYYY-MM-DD'
         // const currentDate = new Date().toLocaleDateString('en-CA');  // 'YYYY-MM-DD'
         // Query to fetch completed quests for the given user where completed = true and completed_at is today
         const [completedQuests] = await db.query(
@@ -626,9 +629,9 @@ app.get('/quests/completed', async (req, res) => {
 });
 
 app.post('/quests/finish', async (req, res) => {
-    const { questId, userId } = req.body;
+    const { questId, userId, date } = req.body;
 
-    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const now = new Date(date).toISOString().slice(0, 19).replace("T", " ");
 
     try {
         const [userExists] = await db.query('SELECT id, guild FROM users WHERE id = ?', [userId]);
