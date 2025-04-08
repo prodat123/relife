@@ -555,7 +555,7 @@ app.get('/quests/active', async (req, res) => {
 
 // Fetch completed quests the user has participated in
 app.get('/quests/completed', async (req, res) => {
-    const { userId } = req.query;
+    const { userId, date } = req.query;
 
     // Validate if the user ID is provided
     if (!userId) {
