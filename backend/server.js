@@ -551,16 +551,14 @@ app.get('/quests/active', async (req, res) => {
         return res.status(400).json({ error: 'User ID is required' });
     }
 
-    const now = new Date(date)
-
     try {
         const [activeQuests] = await db.query(
             `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, qp.expired_at, q.* 
              FROM quest_participants qp
              INNER JOIN quests q ON qp.quest_id = q.id
              WHERE qp.user_id = ? 
-               AND (qp.completed = 0 OR ? < qp.expired_at)`,
-            [userId, now]
+               AND (qp.completed = 0)`,
+            [userId]
         );
         
         res.status(200).json(activeQuests);
