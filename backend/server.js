@@ -384,9 +384,9 @@ app.get('/quest/:id', async (req, res) => {
 });
 
 app.post('/quests/select', async (req, res) => {
-    const { questId, userId, currentDate } = req.body;
+    const { questId, userId } = req.body;
 
-    const formattedDate = new Date(currentDate);
+    const formattedDate = new Date();
 
     if (!questId || !userId) {
         return res.status(400).json({ error: 'Quest ID and User ID are required' });
@@ -467,7 +467,7 @@ app.post('/quests/select', async (req, res) => {
                 `UPDATE quest_participants 
                  SET progress = ?, joined_at = ?, joined_at_datetime = ?, expired_at = ?, completed = ? 
                  WHERE id = ?`,
-                ['Started', datetime, currentDate, expiredAt, false, existing[0].id]
+                ['Started', datetime, formattedDate, expiredAt, false, existing[0].id]
             );
 
             await connection.commit();
@@ -505,41 +505,45 @@ app.post('/quests/select', async (req, res) => {
     }
 });
 
-
-
-
 app.post('/quests/remove', async (req, res) => {
     const { questId, userId } = req.body;
 
-    // const decryptedUserId = decryptUserId(userId);
     if (!questId || !userId) {
         return res.status(400).json({ error: 'Quest ID and User ID are required' });
     }
 
+    const connection = await db.getConnection(); // create a new connection for transaction
+
     try {
-        // Check if the user is already a participant
-        const [existingParticipant] = await db.query(
+        await connection.beginTransaction(); // Begin transaction
+
+        const [existingParticipant] = await connection.query(
             'SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ?',
             [questId, userId]
         );
 
         if (existingParticipant.length === 0) {
+            await connection.rollback(); // Rollback if user wasn't in quest
             return res.status(400).json({ error: 'You have not selected this quest' });
         }
 
-        // Remove the user from the quest participants table
-        await db.query(
+        await connection.query(
             'DELETE FROM quest_participants WHERE quest_id = ? AND user_id = ?',
             [questId, userId]
         );
 
+        await connection.commit(); // Commit if everything is good
         res.status(200).json({ message: 'Quest removed successfully' });
 
     } catch (error) {
+        await connection.rollback(); // Rollback on any error
         console.error('Error removing quest:', error);
         res.status(500).json({ error: 'An error occurred while removing the quest' });
+    } finally {
+        connection.release(); // Always release the connection
     }
 });
+
 
 // Fetch quests the user is participating in
 app.get('/quests/active', async (req, res) => {
@@ -594,7 +598,7 @@ app.get('/quests/filled-slots/:userId', async (req, res) => {
 
 // Fetch completed quests the user has participated in
 app.get('/quests/completed', async (req, res) => {
-    const { userId, date } = req.query;
+    const { userId } = req.query;
 
     // Validate if the user ID is provided
     if (!userId) {
@@ -606,7 +610,7 @@ app.get('/quests/completed', async (req, res) => {
         
         // Get the current date (formatted as 'YYYY-MM-DD')
        
-        const currentDate = new Date(date).toISOString().slice(0, 10); // 'YYYY-MM-DD'
+        const currentDate = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
         // const currentDate = new Date().toLocaleDateString('en-CA');  // 'YYYY-MM-DD'
         // Query to fetch completed quests for the given user where completed = true and completed_at is today
         const [completedQuests] = await db.query(
@@ -628,7 +632,7 @@ app.get('/quests/completed', async (req, res) => {
 app.post('/quests/finish', async (req, res) => {
     const { questId, userId, date } = req.body;
 
-    const now = new Date(date).toISOString().slice(0, 19).replace("T", " ");
+    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
 
     try {
         const [userExists] = await db.query('SELECT id, guild FROM users WHERE id = ?', [userId]);
