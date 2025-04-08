@@ -512,37 +512,30 @@ app.post('/quests/remove', async (req, res) => {
         return res.status(400).json({ error: 'Quest ID and User ID are required' });
     }
 
-    const connection = await db.getConnection(); // create a new connection for transaction
 
     try {
-        await connection.beginTransaction(); // Begin transaction
-
-        const [existingParticipant] = await connection.query(
+        const [existingParticipant] = await db.query(
             'SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ?',
             [questId, userId]
         );
 
         if (existingParticipant.length === 0) {
-            await connection.rollback(); // Rollback if user wasn't in quest
             return res.status(400).json({ error: 'You have not selected this quest' });
         }
 
-        await connection.query(
+        await db.query(
             'DELETE FROM quest_participants WHERE quest_id = ? AND user_id = ?',
             [questId, userId]
         );
 
-        await connection.commit(); // Commit if everything is good
         res.status(200).json({ message: 'Quest removed successfully' });
 
     } catch (error) {
-        await connection.rollback(); // Rollback on any error
         console.error('Error removing quest:', error);
         res.status(500).json({ error: 'An error occurred while removing the quest' });
-    } finally {
-        connection.release(); // Always release the connection
     }
 });
+
 
 
 // Fetch quests the user is participating in
@@ -559,8 +552,7 @@ app.get('/quests/active', async (req, res) => {
             `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, qp.expired_at, q.* 
              FROM quest_participants qp
              INNER JOIN quests q ON qp.quest_id = q.id
-             WHERE qp.user_id = ? 
-               AND (qp.completed = 0)`,
+             WHERE qp.user_id = ? AND qp.completed = 0`,
             [userId]
         );
         
@@ -568,30 +560,6 @@ app.get('/quests/active', async (req, res) => {
     } catch (error) {
         console.error('Error fetching active quests:', error);
         res.status(500).json({ error: 'An error occurred while fetching active quests' });
-    }
-});
-
-app.get('/quests/filled-slots/:userId', async (req, res) => {
-    const { userId } = req.params;
-
-    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
-
-    if (!userId) {
-        return res.status(400).json({ error: 'User ID is required' });
-    }
-
-    try {
-        // Query to count active quests where expired_at > NOW()
-        const [result] = await db.query(
-            'SELECT COUNT(*) AS activeQuests FROM quest_participants WHERE user_id = ? AND ? < expired_at',
-            [userId, now]
-        );
-
-        res.status(200).json({ activeQuests: result[0].activeQuests });
-
-    } catch (error) {
-        console.error('Error fetching active quests:', error);
-        res.status(500).json({ error: 'An error occurred while retrieving active quests.' });
     }
 });
 
