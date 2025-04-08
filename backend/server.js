@@ -551,7 +551,7 @@ app.get('/quests/active', async (req, res) => {
         return res.status(400).json({ error: 'User ID is required' });
     }
 
-    const now = new Date(date).toISOString().slice(0, 19).replace("T", " ");
+    const now = new Date(date)
 
     try {
         const [activeQuests] = await db.query(
