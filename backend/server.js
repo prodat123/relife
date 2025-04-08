@@ -385,24 +385,20 @@ app.get('/quest/:id', async (req, res) => {
 
 app.post('/quests/select', async (req, res) => {
     const { questId, userId } = req.body;
-
     const formattedDate = new Date();
 
     if (!questId || !userId) {
         return res.status(400).json({ error: 'Quest ID and User ID are required' });
     }
 
-    const connection = await db.getConnection();
-    await connection.beginTransaction();
-
     try {
-        // Lock the user row to prevent race conditions
-        const [userExists] = await connection.query(
-            'SELECT id, guild FROM users WHERE id = ? FOR UPDATE',
+        // Check if user exists and get their guild
+        const [userExists] = await db.query(
+            'SELECT id, guild FROM users WHERE id = ?',
             [userId]
         );
+
         if (userExists.length === 0) {
-            await connection.rollback();
             return res.status(400).json({ error: 'User does not exist' });
         }
 
@@ -411,51 +407,48 @@ app.post('/quests/select', async (req, res) => {
         let questTimerBuff = 0;
 
         if (guildName) {
-            const [guild] = await connection.query(
-                'SELECT guild_upgrades FROM guilds WHERE name = ? FOR UPDATE',
+            const [guild] = await db.query(
+                'SELECT guild_upgrades FROM guilds WHERE name = ?',
                 [guildName]
             );
 
             if (guild.length === 0) {
-                await connection.rollback();
                 return res.status(404).json({ error: 'Guild not found' });
             }
 
             const guildUpgrades = JSON.parse(guild[0].guild_upgrades || '[]');
             const extraSlotsUpgrade = guildUpgrades.find(u => u.type === 'extraSlots');
             const questTimerBuffUpgrade = guildUpgrades.find(u => u.type === 'questTimerBuff');
+
             extraSlots = extraSlotsUpgrade ? extraSlotsUpgrade.level * 2 : 0;
             questTimerBuff = questTimerBuffUpgrade ? questTimerBuffUpgrade.level * 5 : 0;
         }
 
-        // Count active quests using FOR UPDATE to lock quest participation rows
-        const datetime = formattedDate.toISOString().slice(0, 19).replace('T', ' ');
-
-        const [activeQuests] = await connection.query(
-            'SELECT id FROM quest_participants WHERE user_id = ? AND completed = 0 FOR UPDATE',
-            [userId, formattedDate]
+        // Count active quests
+        const [activeQuests] = await db.query(
+            'SELECT id FROM quest_participants WHERE user_id = ? AND completed = 0',
+            [userId]
         );
 
         const maxSlots = 4 + extraSlots;
         if (activeQuests.length >= maxSlots) {
-            await connection.rollback();
             return res.status(400).json({ error: `You already have ${maxSlots} active quests.` });
         }
 
-        // Prevent starting the same quest twice
-        const [existing] = await connection.query(
-            'SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ? FOR UPDATE',
+        // Prevent duplicate quest start
+        const [existing] = await db.query(
+            'SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ?',
             [questId, userId]
         );
 
+        const datetime = formattedDate.toISOString().slice(0, 19).replace('T', ' ');
+
         if (existing.length > 0) {
             if (existing[0].progress === 'Started') {
-                await connection.rollback();
                 return res.status(200).json({ message: 'Quest already started by this user' });
             }
 
-            // Update progress to 'Started'
-            const [quest] = await connection.query(
+            const [quest] = await db.query(
                 'SELECT difficulty FROM quests WHERE id = ?',
                 [questId]
             );
@@ -463,19 +456,18 @@ app.post('/quests/select', async (req, res) => {
             const expirationMinutes = (difficulty * 30) - questTimerBuff;
             const expiredAt = new Date(formattedDate.getTime() + expirationMinutes * 60 * 1000);
 
-            await connection.query(
+            await db.query(
                 `UPDATE quest_participants 
                  SET progress = ?, joined_at = ?, joined_at_datetime = ?, expired_at = ?, completed = ? 
                  WHERE id = ?`,
                 ['Started', datetime, formattedDate, expiredAt, false, existing[0].id]
             );
 
-            await connection.commit();
             return res.status(200).json({ message: 'Quest progress updated to Started' });
         }
 
         // Start a new quest
-        const [quest] = await connection.query(
+        const [quest] = await db.query(
             'SELECT difficulty FROM quests WHERE id = ?',
             [questId]
         );
@@ -483,27 +475,24 @@ app.post('/quests/select', async (req, res) => {
         const expirationMinutes = (difficulty * 30) - questTimerBuff;
         const expiredAt = new Date(formattedDate.getTime() + expirationMinutes * 60 * 1000);
 
-        console.log("Joined at: " + formattedDate);
-        console.log("Expired at: " + expiredAt);
+        console.log("Joined at:", formattedDate);
+        console.log("Expires at:", expiredAt);
 
-        await connection.query(
+        await db.query(
             `INSERT INTO quest_participants 
              (quest_id, user_id, progress, completed, joined_at, expired_at, completed_at, joined_at_datetime) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [questId, userId, 'Started', false, datetime, expiredAt, null, formattedDate]
         );
 
-        await connection.commit();
         return res.status(201).json({ message: `Quest started, expires in ${expirationMinutes} minutes.` });
 
     } catch (err) {
-        await connection.rollback();
         console.error('Error selecting quest:', err);
         return res.status(500).json({ error: 'An error occurred while selecting the quest.' });
-    } finally {
-        connection.release();
     }
 });
+
 
 app.post('/quests/remove', async (req, res) => {
     const { questId, userId } = req.body;
