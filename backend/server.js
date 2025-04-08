@@ -424,16 +424,15 @@ app.post('/quests/select', async (req, res) => {
             const guildUpgrades = JSON.parse(guild[0].guild_upgrades || '[]');
             const extraSlotsUpgrade = guildUpgrades.find(u => u.type === 'extraSlots');
             const questTimerBuffUpgrade = guildUpgrades.find(u => u.type === 'questTimerBuff');
-
             extraSlots = extraSlotsUpgrade ? extraSlotsUpgrade.level * 2 : 0;
             questTimerBuff = questTimerBuffUpgrade ? questTimerBuffUpgrade.level * 5 : 0;
         }
 
         // Count active quests using FOR UPDATE to lock quest participation rows
-        const datetime = new Date(currentDate).toISOString().slice(0, 19).replace('T', ' ');
+        const datetime = formattedDate.toISOString().slice(0, 19).replace('T', ' ');
 
         const [activeQuests] = await connection.query(
-            'SELECT id FROM quest_participants WHERE user_id = ? AND expired_at > ? FOR UPDATE',
+            'SELECT id FROM quest_participants WHERE user_id = ? AND completed = 0 FOR UPDATE',
             [userId, formattedDate]
         );
 
