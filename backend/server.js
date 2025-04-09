@@ -3,7 +3,8 @@ const fastify = require('fastify')({logger: true});
 // const session = require('express-session');
 const bodyParser = require('body-parser');
 const db = require('./db'); // Import the database connection
-const cors = require('cors');
+// const cors = require('cors');
+const cors = require('@fastify/cors');
 const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
 const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
@@ -11,10 +12,11 @@ const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
 require('dotenv').config();
 
 fastify.register(require('@fastify/helmet'));
-fastify.register(require('@fastify/cors'), { 
-  origin: '*', // or your frontend origin
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Allow PUT and others
-
+fastify.register(cors, {
+    origin: ['https://relifehabits.com', '*'], // your frontend domain
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With'],
+    credentials: true
 });
 
 
