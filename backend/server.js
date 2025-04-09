@@ -1,6 +1,6 @@
 const express = require('express');
+const fastify = require('fastify')({logger: true});
 // const session = require('express-session');
-const app = express();
 const bodyParser = require('body-parser');
 const db = require('./db'); // Import the database connection
 const cors = require('cors');
@@ -10,6 +10,14 @@ const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
 
 require('dotenv').config();
 
+fastify.register(require('@fastify/helmet'));
+fastify.register(require('@fastify/cors'), { 
+  origin: '*', // or your frontend origin
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Allow PUT and others
+
+});
+
+
 // const corsOptions = {
 //     origin: 'https://relifehabits.com',   // Your frontend URL
 //     methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -17,11 +25,11 @@ require('dotenv').config();
 //     credentials: true,  // Allow cookies/sessions
 // };
 
-app.use(bodyParser.json());
+// fastify.use(bodyParser.send());
 
-app.use(cors());
+// fastify.use(cors());
 
-// app.use(session({
+// fastify.use(session({
 //     secret: process.env.SECRET_KEY,
 //     resave: false,
 //     saveUninitialized: false,
@@ -32,9 +40,9 @@ app.use(cors());
 //     }
 // }));
 
-// app.use(bodyParser.urlencoded({ extended: true }));
+// fastify.use(bodyParser.urlencoded({ extended: true }));
 
-// app.use(session({
+// fastify.use(session({
 //     secret: process.env.SECRET_KEY,
 //     resave: false,
 //     saveUninitialized: false,
@@ -45,8 +53,8 @@ app.use(cors());
 //     }
 // }));
 
-app.post('/auth/signup', async (req, res) => {
-    const { username, password, email, age, recaptchaToken } = req.body;
+fastify.post('/auth/signup', async (request, reply) => {
+    const { username, password, email, age, recaptchaToken } = request.body;
 
     const defaultStats = JSON.stringify({
         strength: 1,
@@ -56,14 +64,14 @@ app.post('/auth/signup', async (req, res) => {
     });
 
     if (!recaptchaToken || recaptchaToken.length < 40) {
-        return res.status(400).json({ message: 'reCAPTCHA token is missing' });
+        return reply.code(400).send({ message: 'reCAPTCHA token is missing' });
     }
 
     try {
         // Check if username already exists
         const [existing] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
         if (existing.length > 0) {
-            return res.status(400).json({ message: 'Username already exists' });
+            return reply.code(400).send({ message: 'Username already exists' });
         }
 
         // Hash the password
@@ -80,7 +88,7 @@ app.post('/auth/signup', async (req, res) => {
         const [result] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
         const user = result[0];
 
-        res.status(200).json({
+        reply.code(200).send({
             message: 'Login successful',
             id: user.id,
             username: user.username,
@@ -95,19 +103,19 @@ app.post('/auth/signup', async (req, res) => {
         });
     } catch (error) {
         console.error('Error during signup:', error);
-        res.status(500).json({ message: 'Error signing up' });
+        reply.code(500).send({ message: 'Error signing up' });
     }
 });
 
 
-app.post('/auth/login', async (req, res) => {
-    const { username, password } = req.body;
+fastify.post('/auth/login', async (request, reply) => {
+    const { username, password } = request.body;
 
     try {
         // Check if the user exists
         const [result] = await db.query('SELECT * FROM users WHERE username = ?', [username]);
         if (result.length === 0) {
-            return res.status(400).json({ message: 'User not found' });
+            return reply.code(400).send({ message: 'User not found' });
         }
 
         const user = result[0];
@@ -115,10 +123,10 @@ app.post('/auth/login', async (req, res) => {
         // Compare the hashed password
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
-            return res.status(400).json({ message: 'Invalid credentials' });
+            return reply.code(400).send({ message: 'Invalid credentials' });
         }
 
-        res.status(200).json({
+        reply.code(200).send({
             message: 'Login successful',
             id: user.id,
             username: user.username,
@@ -133,19 +141,19 @@ app.post('/auth/login', async (req, res) => {
         });
     } catch (error) {
         console.error('Error during login:', error);
-        res.status(500).json({ message: 'Error logging in' });
+        reply.code(500).send({ message: 'Error logging in' });
     }
 });
 
-app.get("/user", async (req, res) => {
+fastify.get("/user", async (request, reply) => {
     try {
         // Convert userId to an integer
-        const userId = parseInt(req.query.userId, 10);
+        const userId = parseInt(request.query.userId, 10);
         console.log("User ID received:", userId);
 
         // Validate userId
         if (isNaN(userId)) {
-            return res.status(400).json({ error: "Invalid User ID. It must be an integer." });
+            return reply.code(400).send({ error: "Invalid User ID. It must be an integer." });
         }
 
         // Query to fetch user
@@ -156,22 +164,22 @@ app.get("/user", async (req, res) => {
 
         // Check if user exists
         if (results.length === 0) {
-            return res.status(404).json({ error: "User not found" });
+            return reply.code(404).send({ error: "User not found" });
         }
-        res.status(200).json({ user: results[0] });
+        reply.code(200).send({ user: results[0] });
     } catch (error) {
         console.error("Error fetching user:", error);
-        return res.status(500).json({ error: "Internal server error" });
+        return reply.code(500).send({ error: "Internal server error" });
     }
 });
 
 // Logout Route
-app.post('/auth/logout', (req, res) => {
-    req.session.destroy((err) => {
+fastify.post('/auth/logout', (request, reply) => {
+    request.session.destroy((err) => {
         if (err) {
-            return res.status(500).json({ message: 'Error logging out' });
+            return reply.code(500).send({ message: 'Error logging out' });
         }
-        res.status(200).json({ message: 'Logout successful' });
+        reply.code(200).send({ message: 'Logout successful' });
     });
 });
 
@@ -362,33 +370,34 @@ cron.schedule('0 0 * * *', async () => {
 // });
 
 // Get quests by type
-app.get('/quests', async (req, res) => {
+fastify.get('/quests', async (request, reply) => {
     try {
-        const [ quests ] = await db.query('SELECT * FROM quests');
-        res.json(quests);
+        const [quests] = await db.query('SELECT * FROM quests');
+        reply.send(quests);
     } catch (error) {
         console.error('Error fetching quests:', error);
-        res.status(500).json({ message: 'Internal Server Error' });
+        return reply.code(500).send({ message: 'Internal Server Error' });
     }
 });
+  
 
-app.get('/quest/:id', async (req, res) => {
+fastify.get('/quest/:id', async (request, reply) => {
     try {
-        const { id } = req.query;
+        const { id } = request.query;
         const [ quests ] = await db.query('SELECT * FROM quests WHERE id = ?', [id]);
-        res.json(quests);
+        reply.send(quests);
     } catch (error) {
         console.error('Error fetching quests:', error);
-        res.status(500).json({ message: 'Internal Server Error' });
+        reply.code(500).send({ message: 'Internal Server Error' });
     }
 });
 
-app.post('/quests/select', async (req, res) => {
-    const { questId, userId } = req.body;
+fastify.post('/quests/select', async (request, reply) => {
+    const { questId, userId } = request.body;
     const formattedDate = new Date();
 
     if (!questId || !userId) {
-        return res.status(400).json({ error: 'Quest ID and User ID are required' });
+        return reply.code(400).send({ error: 'Quest ID and User ID are required' });
     }
 
     try {
@@ -399,7 +408,7 @@ app.post('/quests/select', async (req, res) => {
         );
 
         if (userExists.length === 0) {
-            return res.status(400).json({ error: 'User does not exist' });
+            return reply.code(400).send({ error: 'User does not exist' });
         }
 
         const guildName = userExists[0].guild;
@@ -413,7 +422,7 @@ app.post('/quests/select', async (req, res) => {
             );
 
             if (guild.length === 0) {
-                return res.status(404).json({ error: 'Guild not found' });
+                return reply.code(404).send({ error: 'Guild not found' });
             }
 
             const guildUpgrades = JSON.parse(guild[0].guild_upgrades || '[]');
@@ -432,7 +441,7 @@ app.post('/quests/select', async (req, res) => {
 
         const maxSlots = 4 + extraSlots;
         if (activeQuests.length >= maxSlots) {
-            return res.status(400).json({ error: `You already have ${maxSlots} active quests.` });
+            return reply.code(400).send({ error: `You already have ${maxSlots} active quests.` });
         }
 
         // Prevent duplicate quest start
@@ -445,7 +454,7 @@ app.post('/quests/select', async (req, res) => {
 
         if (existing.length > 0) {
             if (existing[0].progress === 'Started') {
-                return res.status(200).json({ message: 'Quest already started by this user' });
+                return reply.code(200).send({ message: 'Quest already started by this user' });
             }
 
             const [quest] = await db.query(
@@ -463,7 +472,7 @@ app.post('/quests/select', async (req, res) => {
                 ['Started', datetime, formattedDate, expiredAt, false, existing[0].id]
             );
 
-            return res.status(200).json({ message: 'Quest progress updated to Started' });
+            return reply.code(200).send({ message: 'Quest progress updated to Started' });
         }
 
         // Start a new quest
@@ -485,20 +494,20 @@ app.post('/quests/select', async (req, res) => {
             [questId, userId, 'Started', false, datetime, expiredAt, null, formattedDate]
         );
 
-        return res.status(201).json({ message: `Quest started, expires in ${expirationMinutes} minutes.` });
+        return reply.code(201).send({ message: `Quest started, expires in ${expirationMinutes} minutes.` });
 
     } catch (err) {
         console.error('Error selecting quest:', err);
-        return res.status(500).json({ error: 'An error occurred while selecting the quest.' });
+        return reply.code(500).send({ error: 'An error occurred while selecting the quest.' });
     }
 });
 
 
-app.post('/quests/remove', async (req, res) => {
-    const { questId, userId } = req.body;
+fastify.post('/quests/remove', async (request, reply) => {
+    const { questId, userId } = request.body;
 
     if (!questId || !userId) {
-        return res.status(400).json({ error: 'Quest ID and User ID are required' });
+        return reply.code(400).send({ error: 'Quest ID and User ID are required' });
     }
 
 
@@ -509,7 +518,7 @@ app.post('/quests/remove', async (req, res) => {
         );
 
         if (existingParticipant.length === 0) {
-            return res.status(400).json({ error: 'You have not selected this quest' });
+            return reply.code(400).send({ error: 'You have not selected this quest' });
         }
 
         await db.query(
@@ -517,80 +526,76 @@ app.post('/quests/remove', async (req, res) => {
             [questId, userId]
         );
 
-        res.status(200).json({ message: 'Quest removed successfully' });
+        reply.code(200).send({ message: 'Quest removed successfully' });
 
     } catch (error) {
         console.error('Error removing quest:', error);
-        res.status(500).json({ error: 'An error occurred while removing the quest' });
+        reply.code(500).send({ error: 'An error occurred while removing the quest' });
     }
 });
 
 
 
 // Fetch quests the user is participating in
-app.get('/quests/active', async (req, res) => {
-    const { userId, date } = req.query;
-    // const decryptedUserId = decryptUserId(userId);
-
+fastify.get('/quests/active', async (request, reply) => {
+    const { userId, date } = request.query;
+  
     if (!userId) {
-        return res.status(400).json({ error: 'User ID is required' });
+      return reply.code(400).send({ error: 'User ID is required' });
     }
-
+  
     try {
-        const [activeQuests] = await db.query(
-            `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, qp.expired_at, q.* 
-             FROM quest_participants qp
-             INNER JOIN quests q ON qp.quest_id = q.id
-             WHERE qp.user_id = ? AND qp.completed = 0`,
-            [userId]
-        );
-        
-        res.status(200).json(activeQuests);
+      const [activeQuests] = await db.query(
+        `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, qp.expired_at, q.* 
+         FROM quest_participants qp
+         INNER JOIN quests q ON qp.quest_id = q.id
+         WHERE qp.user_id = ? AND qp.completed = 0`,
+        [userId]
+      );
+  
+      return reply.code(200).send(activeQuests);
     } catch (error) {
-        console.error('Error fetching active quests:', error);
-        res.status(500).json({ error: 'An error occurred while fetching active quests' });
+      console.error('Error fetching active quests:', error);
+      return reply.code(500).send({ error: 'An error occurred while fetching active quests' });
     }
 });
+  
 
 
 // Fetch completed quests the user has participated in
-app.get('/quests/completed', async (req, res) => {
-    const { userId } = req.query;
-
+fastify.get('/quests/completed', async (request, reply) => {
+    const { userId } = request.query;
+  
     // Validate if the user ID is provided
     if (!userId) {
-        return res.status(400).json({ error: 'User ID is required' });
+      return reply.code(400).send({ error: 'User ID is required' });
     }
-
+  
     try {
-
-        
-        // Get the current date (formatted as 'YYYY-MM-DD')
-       
-        const currentDate = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
-        console.log(currentDate);   
-        // const currentDate = new Date().toLocaleDateString('en-CA');  // 'YYYY-MM-DD'
-        // Query to fetch completed quests for the given user where completed = true and completed_at is today
-        const [completedQuests] = await db.query(
-            `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, q.name, q.description, qp.completed_at 
-             FROM quest_participants qp
-             INNER JOIN quests q ON qp.quest_id = q.id
-             WHERE qp.user_id = ? AND qp.completed = 1 AND qp.completed_at = ?`,
-            [userId, currentDate]  // Use the currentDate for filtering
-        );
-
-        console.log(completedQuests);
-        // Return the completed quests
-        res.status(200).json(completedQuests);
+      // Get the current date in 'YYYY-MM-DD' format
+      const currentDate = new Date().toISOString().slice(0, 10);
+      console.log('Current Date:', currentDate);
+  
+      // Query to fetch completed quests for the given user where completed = true and completed_at is today
+      const [completedQuests] = await db.query(
+        `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, q.name, q.description, qp.completed_at 
+         FROM quest_participants qp
+         INNER JOIN quests q ON qp.quest_id = q.id
+         WHERE qp.user_id = ? AND qp.completed = 1 AND qp.completed_at = ?`,
+        [userId, currentDate]
+      );
+  
+      // Return the completed quests
+      return reply.code(200).send(completedQuests);
     } catch (error) {
-        // Handle errors
-        console.error('Error fetching completed quests:', error);
-        res.status(500).json({ error: 'An error occurred while fetching completed quests' });
+      console.error('Error fetching completed quests:', error);
+      return reply.code(500).send({ error: 'An error occurred while fetching completed quests' });
     }
 });
+  
 
-app.post('/quests/finish', async (req, res) => {
-    const { questId, userId, date } = req.body;
+fastify.post('/quests/finish', async (request, reply) => {
+    const { questId, userId, date } = request.body;
 
     const now = new Date().toISOString().slice(0, 19).replace("T", " ");
 
@@ -599,7 +604,7 @@ app.post('/quests/finish', async (req, res) => {
     try {
         const [userExists] = await db.query('SELECT id, guild FROM users WHERE id = ?', [userId]);
         if (userExists.length === 0) {
-            return res.status(400).json({ error: 'User does not exist' });
+            return reply.code(400).send({ error: 'User does not exist' });
         }
 
         
@@ -615,7 +620,7 @@ app.post('/quests/finish', async (req, res) => {
             `, [guildName]);
     
             if (guild.length === 0) {
-                return res.status(404).json({ error: 'Guild not found' });
+                return reply.code(404).send({ error: 'Guild not found' });
             }
     
             const guildUpgrades = JSON.parse(guild[0].guild_upgrades);
@@ -634,7 +639,7 @@ app.post('/quests/finish', async (req, res) => {
         );
 
         if (existing.length > 0) {
-            return res.status(400).json({ error: 'Quest already completed today.' });
+            return reply.code(400).send({ error: 'Quest already completed today.' });
         }
 
         const [claimable] = await db.query(
@@ -643,7 +648,7 @@ app.post('/quests/finish', async (req, res) => {
         );
 
         if(claimable.length === 0){
-            return res.status(400).json({ error: 'Quest is not ready to be claimed' });
+            return reply.code(400).send({ error: 'Quest is not ready to be claimed' });
         }
 
         // Retrieve the quest's rewards (experience, item, and stat rewards)
@@ -652,7 +657,7 @@ app.post('/quests/finish', async (req, res) => {
             [questId]
         );
         if (quest.length === 0) {
-            return res.status(404).json({ error: 'Quest not found.' });
+            return reply.code(404).send({ error: 'Quest not found.' });
         }
 
         const { experience_reward: experienceReward, item_reward: itemReward, stat_reward: statReward } = quest[0];
@@ -729,7 +734,7 @@ app.post('/quests/finish', async (req, res) => {
         //         [itemReward]
         //     );
         //     if (itemDetails.length === 0) {
-        //         return res.status(404).json({ error: 'Reward item not found.' });
+        //         return reply.code(404).send({ error: 'Reward item not found.' });
         //     }
 
         //     const item = itemDetails[0];
@@ -755,109 +760,102 @@ app.post('/quests/finish', async (req, res) => {
         // }
 
 
-        res.json({ success: true, message: 'Quest marked as finished and rewards applied.' });
+        reply.send({ success: true, message: 'Quest marked as finished and rewards applied.' });
     } catch (err) {
         console.error('Error finishing quest:', err);
-        res.status(500).json({ error: 'Failed to mark quest as finished.' });
+        reply.code(500).send({ error: 'Failed to mark quest as finished.' });
     }
 });
 
-app.get('/quests/daily', async (req, res) => {
-    try {
-        // Set timezone to Pacific Time (PST/PDT)
-        await db.query("SET time_zone = '-08:00';"); // Pacific Standard Time (PST, UTC-8)
+// fastify.get('/quests/daily', async (request, reply) => {
+//     try {
+//         // Set timezone to Pacific Time (PST/PDT)
+//         await db.query("SET time_zone = '-08:00';"); // Pacific Standard Time (PST, UTC-8)
 
-        // Fetch today's quests
-        const query = `
-            SELECT q.id, q.name, q.description, q.difficulty, q.experience_reward, q.item_reward, q.stat_reward
-            FROM quests q
-            INNER JOIN daily_quests dq ON q.id = dq.quest_id;
-        `;
+//         // Fetch today's quests
+//         const query = `
+//             SELECT q.id, q.name, q.description, q.difficulty, q.experience_reward, q.item_reward, q.stat_reward
+//             FROM quests q
+//             INNER JOIN daily_quests dq ON q.id = dq.quest_id;
+//         `;
 
-        const [results] = await db.query(query);
+//         const [results] = await db.query(query);
 
-        if (!results || results.length === 0) {
-            console.log('No quests found for today.');
-            return res.status(404).json({ message: 'No daily quests found' });
-        }
+//         if (!results || results.length === 0) {
+//             console.log('No quests found for today.');
+//             return reply.code(404).send({ message: 'No daily quests found' });
+//         }
 
-        res.json(results);
-    } catch (err) {
-        console.error('Error fetching daily quests:', err.message);
-        res.status(500).json({ message: 'Internal Server Error', error: err.message });
-    }
-});
+//         reply.send(results);
+//     } catch (err) {
+//         console.error('Error fetching daily quests:', err.message);
+//         reply.code(500).send({ message: 'Internal Server Error', error: err.message });
+//     }
+// });
 
-app.get('/account', async (req, res) => {
-    const { userId } = req.query;
-
+fastify.get('/account', async (request, reply) => {
+    const { userId } = request.query;
+  
     if (!userId) {
-        return res.status(400).json({ error: 'User ID is required' });
+      return reply.code(400).send({ error: 'User ID is required' });
     }
-
+  
     try {
-        // Fetch the user's account data
-        const [userResults] = await db.query(
-            'SELECT * FROM users WHERE id = ?',
-            [userId]
-        );
-
-        if (userResults.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        const user = userResults[0];
-
-        // Log the user data for debugging
-        // console.log("Fetched User Data:", user);
-
-        // Parse inventory from the user's data (stored as a JSON string)
-        const inventoryItems = user.inventory ? JSON.parse(user.inventory) : [];
-
-        // Log the parsed inventory for debugging
-        // console.log("Parsed Inventory Items:", inventoryItems);
-
-        // Provide default placeholders for missing slots based on the inventory directly
-        const equipment = {
-            head: user.head && inventoryItems.find(item => item.id === String(user.head)) || { id: '', name: 'None', type: 'head' },
-            torso: user.torso && inventoryItems.find(item => item.id === String(user.torso)) || { id: '', name: 'None', type: 'torso' },
-            legs: user.legs && inventoryItems.find(item => item.id === String(user.legs)) || { id: '', name: 'None', type: 'legs' },
-            feet: user.feet && inventoryItems.find(item => item.id === String(user.feet)) || { id: '', name: 'None', type: 'feet' },
-            weapon: user.weapon && inventoryItems.find(item => item.id === String(user.weapon)) || { id: '', name: 'None', type: 'weapon' },
-        };
-
-        // Log the equipment data for debugging
-        // console.log("Mapped Equipment Data:", equipment);
-
-        // Send the response with user data, inventory, and equipment
-        res.status(200).json({
-            username: user.username,
-            experience: user.experience,
-            stats: JSON.parse(user.stats || '{}'),
-            equipment,
-            inventory: inventoryItems, // Send inventory directly from the user's data
-            currency: user.currency,
-            discount: user.discount,
-            last_spin: user.last_spin,
-            spells: user.spells,
-            ownedSpells: user.ownedSpells,
-            badges: user.badges,
-            perks: user.perks,
-            perkPoints: user.perkPoints,
-            claimedMilestones: user.claimedMilestones,
-            guild: user.guild,
-        });
+      // Fetch the user's account data
+      const [userResults] = await db.query(
+        'SELECT * FROM users WHERE id = ?',
+        [userId]
+      );
+  
+      if (userResults.length === 0) {
+        return reply.code(404).send({ error: 'User not found' });
+      }
+  
+      const user = userResults[0];
+  
+      // Parse inventory from the user's data (stored as a JSON string)
+      const inventoryItems = user.inventory ? JSON.parse(user.inventory) : [];
+  
+      // Provide default placeholders for missing slots based on the inventory directly
+      const equipment = {
+        head: user.head && inventoryItems.find(item => item.id === String(user.head)) || { id: '', name: 'None', type: 'head' },
+        torso: user.torso && inventoryItems.find(item => item.id === String(user.torso)) || { id: '', name: 'None', type: 'torso' },
+        legs: user.legs && inventoryItems.find(item => item.id === String(user.legs)) || { id: '', name: 'None', type: 'legs' },
+        feet: user.feet && inventoryItems.find(item => item.id === String(user.feet)) || { id: '', name: 'None', type: 'feet' },
+        weapon: user.weapon && inventoryItems.find(item => item.id === String(user.weapon)) || { id: '', name: 'None', type: 'weapon' },
+      };
+  
+      // Send the response with user data, inventory, and equipment
+      return reply.code(200).send({
+        username: user.username,
+        experience: user.experience,
+        stats: JSON.parse(user.stats || '{}'),
+        equipment,
+        inventory: inventoryItems,
+        currency: user.currency,
+        discount: user.discount,
+        last_spin: user.last_spin,
+        spells: user.spells,
+        ownedSpells: user.ownedSpells,
+        badges: user.badges,
+        perks: user.perks,
+        perkPoints: user.perkPoints,
+        claimedMilestones: user.claimedMilestones,
+        guild: user.guild,
+      });
+  
     } catch (error) {
-        console.error('Error fetching account data:', error.message);
-        res.status(500).json({ error: 'Failed to fetch account data' });
+      console.error('Error fetching account data:', error.message);
+      return reply.code(500).send({ error: 'Failed to fetch account data' });
     }
-});
+  });
+  
 
-app.get('/monster', async (req, res) => {
-    const { monsterName } = req.query;
+fastify.get('/monster', async (request, reply) => {
+    const { monsterName } = request.query;
 
     if (!monsterName) {
-        return res.status(400).json({ error: 'Monster name is required' });
+        return reply.code(400).send({ error: 'Monster name is required' });
     }
 
     try {
@@ -868,7 +866,7 @@ app.get('/monster', async (req, res) => {
         );
 
         if (monsterResults.length === 0) {
-            return res.status(404).json({ error: 'Monster not found' });
+            return reply.code(404).send({ error: 'Monster not found' });
         }
 
         const monsterResult = monsterResults[0];
@@ -877,14 +875,14 @@ app.get('/monster', async (req, res) => {
         // console.log("Mapped Equipment Data:", equipment);
 
         // Send the response with user data, inventory, and equipment
-        res.status(200).json(monsterResult);
+        reply.code(200).send(monsterResult);
     } catch (error) {
         console.error('Error fetching monster data:', error.message);
-        res.status(500).json({ error: 'Failed to fetch monster data' });
+        reply.code(500).send({ error: 'Failed to fetch monster data' });
     }
 });
 
-app.get('/allMonsters', async (req, res) => {
+fastify.get('/allMonsters', async (request, reply) => {
     try {
         // Fetch the user's account data
         const [monsterResults] = await db.query(
@@ -892,7 +890,7 @@ app.get('/allMonsters', async (req, res) => {
         );
 
         if (monsterResults.length === 0) {
-            return res.status(404).json({ error: 'Monster not found' });
+            return reply.code(404).send({ error: 'Monster not found' });
         }
 
         // const monsterResult = monsterResults[0];
@@ -901,17 +899,17 @@ app.get('/allMonsters', async (req, res) => {
         // console.log("Mapped Equipment Data:", equipment);
 
         // Send the response with user data, inventory, and equipment
-        res.status(200).json(monsterResults);
+        reply.code(200).send(monsterResults);
     } catch (error) {
         console.error('Error fetching monster data:', error.message);
-        res.status(500).json({ error: 'Failed to fetch monster data' });
+        reply.code(500).send({ error: 'Failed to fetch monster data' });
     }
 });
 
-app.get('/leaderboard', async (req, res) => {
+fastify.get('/leaderboard', async (request, reply) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 5000;
+        const page = parseInt(request.query.page) || 1;
+        const limit = parseInt(request.query.limit) || 4000;
         const offset = (page - 1) * limit;
 
         const [ users ] = await db.query(`
@@ -923,7 +921,7 @@ app.get('/leaderboard', async (req, res) => {
 
         const [ total ] = await db.query('SELECT COUNT(*) as count FROM users');
 
-        res.json({
+        reply.send({
             users,
             currentPage: page,
             totalPages: Math.ceil(total[0].count / limit),
@@ -931,23 +929,23 @@ app.get('/leaderboard', async (req, res) => {
         });
     } catch (error) {
         console.error('Error fetching leaderboard:', error);
-        res.status(500).json({ message: 'Internal Server Error' });
+        reply.code(500).send({ message: 'Internal Server Error' });
     }
 });
 
-app.post('/update-equipment', async (req, res) => {
-    const { userId, slot, itemId, inventory } = req.body;
+fastify.post('/update-equipment', async (request, reply) => {
+    const { userId, slot, itemId, inventory } = request.body;
     // console.log(userId, slot, itemId, inventory);
 
     // Validate required fields
     if (!userId || !slot || !inventory) {
-        return res.status(400).json({ error: 'Missing required fields: userId, slot, or inventory' });
+        return reply.code(400).send({ error: 'Missing required fields: userId, slot, or inventory' });
     }
 
     // Validate slot
     const validSlots = ['head', 'torso', 'legs', 'feet', 'weapon'];
     if (!validSlots.includes(slot)) {
-        return res.status(400).json({ error: 'Invalid slot specified' });
+        return reply.code(400).send({ error: 'Invalid slot specified' });
     }
 
     try {
@@ -958,7 +956,7 @@ app.post('/update-equipment', async (req, res) => {
         );
 
         if (userResult.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
+            return reply.code(404).send({ error: 'User not found' });
         }
 
         // let userStats = JSON.parse(userResult[0].stats || '{}');
@@ -993,7 +991,7 @@ app.post('/update-equipment', async (req, res) => {
                 [slot, userId]
             );
 
-            return res.status(200).json({ 
+            return reply.code(200).send({ 
                 message: 'Item unequipped successfully', 
                 // updatedStats: userStats 
             });
@@ -1004,7 +1002,7 @@ app.post('/update-equipment', async (req, res) => {
 
         const newItem = inventory.find(item => item.id === itemId);
         if (!newItem) {
-            return res.status(404).json({ error: 'Item not found in inventory' });
+            return reply.code(404).send({ error: 'Item not found in inventory' });
         }
 
         // const newItemStats = JSON.parse(newItem.stats || '{}');
@@ -1024,33 +1022,33 @@ app.post('/update-equipment', async (req, res) => {
             [slot, itemId, userId]
         );
 
-        res.status(200).json({ 
+        reply.code(200).send({ 
             message: 'Item equipped successfully', 
             // updatedStats: userStats 
         });
 
     } catch (error) {
         console.error('Error updating equipment and stats:', error.message);
-        res.status(500).json({ error: 'Failed to update equipment and stats' });
+        reply.code(500).send({ error: 'Failed to update equipment and stats' });
     }
 });
 
 
-app.get('/items/:itemName', async (req, res) => {
-    const { itemName } = req.params;  // Get the itemId from the request parameter
+fastify.get('/items/:itemName', async (request, reply) => {
+    const { itemName } = request.params;  // Get the itemId from the request parameter
 
     try {
         // Query to fetch the item from the database
         const results = await db.query('SELECT * FROM items WHERE name = ?', [itemName]);
 
         if (results.length > 0) {
-            res.json(results[0]);  // Return the item as JSON if found
+            reply.send(results[0]);  // Return the item as JSON if found
         } else {
-            res.status(404).json({ error: 'Item not found' });  // Item not found
+            reply.code(404).send({ error: 'Item not found' });  // Item not found
         }
     } catch (error) {
         console.error('Error fetching item:', error);
-        res.status(500).json({ error: 'Database error' });
+        reply.code(500).send({ error: 'Database error' });
     }
 });
 
@@ -1058,12 +1056,12 @@ const generateRandomInt = () => {
     return Math.floor(Math.random() * 1e9); // Generates a random number between 0 and 1 billion
 };
 
-app.post('/level-up-item', async (req, res) => {
-    const { userId, itemId, braveryStat } = req.body;
+fastify.post('/level-up-item', async (request, reply) => {
+    const { userId, itemId, braveryStat } = request.body;
 
     // Validate request parameters
     if (!userId || !itemId || braveryStat === undefined) {
-        return res.status(400).json({ error: 'Invalid request parameters.' });
+        return reply.code(400).send({ error: 'Invalid request parameters.' });
     }
 
     try {
@@ -1076,7 +1074,7 @@ app.post('/level-up-item', async (req, res) => {
         );
 
         if (baseItemDetails.length === 0) {
-            return res.status(404).json({ error: 'Base item not found.' });
+            return reply.code(404).send({ error: 'Base item not found.' });
         }
 
         const baseItem = baseItemDetails[0]; // Base item details (name, stats, type, image_url, description)
@@ -1091,7 +1089,7 @@ app.post('/level-up-item', async (req, res) => {
         );
 
         if (userDetails.length === 0) {
-            return res.status(404).json({ error: 'User not found.' });
+            return reply.code(404).send({ error: 'User not found.' });
         }
 
         let { inventory } = userDetails[0];
@@ -1106,7 +1104,7 @@ app.post('/level-up-item', async (req, res) => {
 
         // If the user doesn't have enough items to upgrade, return an error
         if (itemCount < 2) {
-            return res.status(400).json({ error: 'You need at least two of the same item to upgrade.' });
+            return reply.code(400).send({ error: 'You need at least two of the same item to upgrade.' });
         }
 
         // Calculate the upgrade stats (including bravery influence)
@@ -1158,7 +1156,7 @@ app.post('/level-up-item', async (req, res) => {
             [JSON.stringify(updatedInventory), userId]
         );
 
-        res.json({
+        reply.send({
             success: true,
             message: `You have successfully leveled up the item and added it to your inventory.`,
             updatedInventory,
@@ -1166,27 +1164,27 @@ app.post('/level-up-item', async (req, res) => {
         });
     } catch (err) {
         console.error('Error leveling up item:', err.message, err.stack);
-        res.status(500).json({ error: 'Failed to level up item.' });
+        reply.code(500).send({ error: 'Failed to level up item.' });
     }
 });
 
 
-app.get("/stages", async (req, res) => {
+fastify.get("/stages", async (request, reply) => {
     try {
       const [results] = await db.query("SELECT * FROM stages");
-      res.json(results);
+      reply.send(results);
     } catch (error) {
       console.error("Error fetching stages:", error);
-      res.status(500).json({ error: "Failed to fetch stages" });
+      reply.code(500).send({ error: "Failed to fetch stages" });
     }
 });
 
-app.post("/add-currency", async (req, res) => {
-    const { id } = req.body;  // 'id' is the tower ID
+fastify.post("/add-currency", async (request, reply) => {
+    const { id } = request.body;  // 'id' is the tower ID
 
     // Check for missing parameters
     if (id === undefined) {
-        return res.status(400).json({ error: "Missing tower ID." });
+        return reply.code(400).send({ error: "Missing tower ID." });
     }
 
     try {
@@ -1198,7 +1196,7 @@ app.post("/add-currency", async (req, res) => {
         `, [id]);
 
         if (playerResult.length === 0) {
-            return res.status(404).json({ error: "Tower not found." });
+            return reply.code(404).send({ error: "Tower not found." });
         }
 
         const { userId, floor } = playerResult[0];
@@ -1214,7 +1212,7 @@ app.post("/add-currency", async (req, res) => {
 
         // If no reward, return a message
         if (reward === 0) {
-            return res.status(200).json({ message: "No currency added as reward is 0." });
+            return reply.code(200).send({ message: "No currency added as reward is 0." });
         }
 
         // Update the currency of the user
@@ -1234,21 +1232,21 @@ app.post("/add-currency", async (req, res) => {
             `;
             await db.query(updateQuery, [id]);
 
-            return res.status(200).json({ reward });
+            return reply.code(200).send({ reward });
         } else {
-            return res.status(404).json({ error: "User not found." });
+            return reply.code(404).send({ error: "User not found." });
         }
 
     } catch (error) {
         console.error("Error updating currency_reward:", error);
-        return res.status(500).json({ error: "Internal server error." });
+        return reply.code(500).send({ error: "Internal server error." });
     }
 });
 
-app.get('/shop/items', async (req, res) => {
+fastify.get('/shop/items', async (request, reply) => {
     try {
-        const limit = parseInt(req.query.limit, 10) || 100;
-        const offset = parseInt(req.query.offset, 10) || 0;
+        const limit = parseInt(request.query.limit, 10) || 100;
+        const offset = parseInt(request.query.offset, 10) || 0;
 
         const [items] = await db.query(`
             SELECT 
@@ -1268,19 +1266,19 @@ app.get('/shop/items', async (req, res) => {
             LIMIT ? OFFSET ?
         `, [limit, offset]);
 
-        res.json(items);
+        reply.send(items);
     } catch (error) {
         console.error('Error fetching shop items:', error);
-        res.status(500).json({ error: 'Failed to fetch shop items.' });
+        reply.code(500).send({ error: 'Failed to fetch shop items.' });
     }
 });
 
-app.post('/shop/buy', async (req, res) => {
-    const { userId, itemId, price: discountedPrice, isGacha } = req.body;
+fastify.post('/shop/buy', async (request, reply) => {
+    const { userId, itemId, price: discountedPrice, isGacha } = request.body;
 
     // Validate request parameters
     if (!userId || !itemId || discountedPrice === undefined) {
-        return res.status(400).json({ error: 'Invalid request parameters.' });
+        return reply.code(400).send({ error: 'Invalid request parameters.' });
     }
 
     try {
@@ -1294,7 +1292,7 @@ app.post('/shop/buy', async (req, res) => {
         );
 
         if (itemDetails.length === 0) {
-            return res.status(404).json({ error: 'Item not found.' });
+            return reply.code(404).send({ error: 'Item not found.' });
         }
 
         const { price, stats, ...item } = itemDetails[0];
@@ -1304,12 +1302,12 @@ app.post('/shop/buy', async (req, res) => {
 
         // Validate discounted price
         const calculatedDiscountedPrice = Math.max(
-            Math.floor(price * (1 - (req.body.discount / 100 || 0))),
+            Math.floor(price * (1 - (request.body.discount / 100 || 0))),
             1
         );
 
         if (!isGacha && discountedPrice !== calculatedDiscountedPrice) {
-            return res.status(400).json({ error: 'Invalid discounted price.' });
+            return reply.code(400).send({ error: 'Invalid discounted price.' });
         }
 
         // Fetch user details
@@ -1318,7 +1316,7 @@ app.post('/shop/buy', async (req, res) => {
             [userId]
         );
         if (user.length === 0) {
-            return res.status(404).json({ error: 'User not found.' });
+            return reply.code(404).send({ error: 'User not found.' });
         }
 
         let { currency, inventory } = user[0];
@@ -1326,7 +1324,7 @@ app.post('/shop/buy', async (req, res) => {
 
         // Check if user has enough currency
         if (currency < finalPrice) {
-            return res.status(400).json({ error: 'Not enough currency.' });
+            return reply.code(400).send({ error: 'Not enough currency.' });
         }
 
         // Deduct currency
@@ -1349,7 +1347,7 @@ app.post('/shop/buy', async (req, res) => {
             [currency, JSON.stringify(inventory), userId]
         );
 
-        res.json({
+        reply.send({
             success: true,
             message: `You have successfully purchased the ${item.name}.`,
             updatedCurrency: currency,
@@ -1357,17 +1355,17 @@ app.post('/shop/buy', async (req, res) => {
         });
     } catch (err) {
         console.error('Error purchasing item:', err.message, err.stack);
-        res.status(500).json({ error: 'Failed to purchase item.' });
+        reply.code(500).send({ error: 'Failed to purchase item.' });
     }
 });
 
-app.get('/shop/spells', async (req, res) => {
+fastify.get('/shop/spells', async (request, reply) => {
     try {
-        const limit = Number(req.query.limit) || 100;
-        const offset = Number(req.query.offset) || 0;
+        const limit = Number(request.query.limit) || 100;
+        const offset = Number(request.query.offset) || 0;
 
         if (isNaN(limit) || isNaN(offset)) {
-            return res.status(400).json({ error: 'Invalid limit or offset' });
+            return reply.code(400).send({ error: 'Invalid limit or offset' });
         }
 
         console.log(`Fetching spells with limit=${limit} and offset=${offset}`);
@@ -1392,15 +1390,15 @@ app.get('/shop/spells', async (req, res) => {
         `, [limit, offset]);
 
         console.log('Fetched items:', items);
-        res.json(items);
+        reply.send(items);
     } catch (error) {
         console.error('Error fetching shop spells:', error);
-        res.status(500).json({ error: 'Failed to fetch shop spells.' });
+        reply.code(500).send({ error: 'Failed to fetch shop spells.' });
     }
 });
 
-app.post('/shop/gacha', async (req, res) => {
-    const { userId, seedId, gachaCost } = req.body;
+fastify.post('/shop/gacha', async (request, reply) => {
+    const { userId, seedId, gachaCost } = request.body;
 
     if (seedId) { // 30% chance
         try {
@@ -1411,14 +1409,14 @@ app.post('/shop/gacha', async (req, res) => {
             );
     
             if (!user.length) {
-                return res.status(404).json({ error: "User not found." });
+                return reply.code(404).send({ error: "User not found." });
             }
     
             let { currency, inventory } = user[0];
     
             // Check if user has enough currency
             if (currency < gachaCost) {
-                return res.status(400).json({ error: "Not enough currency." });
+                return reply.code(400).send({ error: "Not enough currency." });
             }
     
             // Deduct gacha cost
@@ -1441,7 +1439,7 @@ app.post('/shop/gacha', async (req, res) => {
             );
     
             if (seedDetails.length === 0) {
-                return res.status(404).json({ error: "Seed not found." });
+                return reply.code(404).send({ error: "Seed not found." });
             }
     
             const seed = seedDetails[0];
@@ -1464,7 +1462,7 @@ app.post('/shop/gacha', async (req, res) => {
             );
     
             console.log("Updated Inventory:", parsedInventory); // Debugging
-            res.status(200).json({ 
+            reply.code(200).send({ 
                 message: "Seed added successfully", 
                 inventory: parsedInventory, 
                 currency 
@@ -1472,18 +1470,18 @@ app.post('/shop/gacha', async (req, res) => {
     
         } catch (error) {
             console.error("Error in gacha function:", error);
-            res.status(500).json({ error: "Internal Server Error" });
+            reply.code(500).send({ error: "Internal Server Error" });
         }
     }
     
 })
 
 
-app.post('/spell-shop/buy', async (req, res) => {
-    const { userId, spellId, price: discountedPrice, isGacha } = req.body;
+fastify.post('/spell-shop/buy', async (request, reply) => {
+    const { userId, spellId, price: discountedPrice, isGacha } = request.body;
 
     if (!userId || !spellId || discountedPrice === undefined) {
-        return res.status(400).json({ error: 'Invalid request parameters.' });
+        return reply.code(400).send({ error: 'Invalid request parameters.' });
     }
 
     try {
@@ -1497,7 +1495,7 @@ app.post('/spell-shop/buy', async (req, res) => {
         );
 
         if (spellDetails.length === 0) {
-            return res.status(404).json({ error: 'Spell not found.' });
+            return reply.code(404).send({ error: 'Spell not found.' });
         }
 
         const { price, stat, mana_cost, cooldown, duration, intelligenceRequired, ...spell } = spellDetails[0];
@@ -1507,12 +1505,12 @@ app.post('/spell-shop/buy', async (req, res) => {
 
         // Validate Discount
         const calculatedDiscountedPrice = Math.max(
-            Math.floor(price * (1 - (req.body.discount / 100 || 0))),
+            Math.floor(price * (1 - (request.body.discount / 100 || 0))),
             1
         );
 
         if (!isGacha && discountedPrice !== calculatedDiscountedPrice) {
-            return res.status(400).json({ error: 'Invalid discounted price.' });
+            return reply.code(400).send({ error: 'Invalid discounted price.' });
         }
 
         // Fetch user details
@@ -1522,7 +1520,7 @@ app.post('/spell-shop/buy', async (req, res) => {
         );
 
         if (user.length === 0) {
-            return res.status(404).json({ error: 'User not found.' });
+            return reply.code(404).send({ error: 'User not found.' });
         }
 
         let { currency, ownedSpells } = user[0];
@@ -1530,7 +1528,7 @@ app.post('/spell-shop/buy', async (req, res) => {
 
         // Check if user has enough currency
         if (currency < finalPrice) {
-            return res.status(400).json({ error: 'Not enough currency.' });
+            return reply.code(400).send({ error: 'Not enough currency.' });
         }
 
         // Deduct currency
@@ -1558,7 +1556,7 @@ app.post('/spell-shop/buy', async (req, res) => {
             [currency, JSON.stringify(ownedSpells), userId]
         );
 
-        res.json({
+        reply.send({
             success: true,
             message: `You have successfully purchased the ${spell.name}.`,
             updatedCurrency: currency,
@@ -1566,17 +1564,17 @@ app.post('/spell-shop/buy', async (req, res) => {
         });
     } catch (err) {
         console.error('Error purchasing spell:', err.message, err.stack);
-        res.status(500).json({ error: 'Failed to purchase spell.' });
+        reply.code(500).send({ error: 'Failed to purchase spell.' });
     }
 });
 
 
 
-// app.post('/spin-wheel', async (req, res) => {
-//     const { userId, intelligence } = req.body;
+// fastify.post('/spin-wheel', async (request, reply) => {
+//     const { userId, intelligence } = request.body;
 
 //     if (!userId || intelligence === undefined) {
-//         return res.status(400).json({ error: 'Invalid request parameters.' });
+//         return reply.code(400).send({ error: 'Invalid request parameters.' });
 //     }
 
 //     try {
@@ -1587,7 +1585,7 @@ app.post('/spell-shop/buy', async (req, res) => {
 //         );
 
 //         if (user.length === 0) {
-//             return res.status(404).json({ error: 'User not found.' });
+//             return reply.code(404).send({ error: 'User not found.' });
 //         }
 
 //         const { last_spin } = user[0];
@@ -1600,7 +1598,7 @@ app.post('/spell-shop/buy', async (req, res) => {
 
 //             if (hoursSinceLastSpin < 6) {
 //                 const timeLeft = 6 - hoursSinceLastSpin;
-//                 return res.status(400).json({
+//                 return reply.code(400).send({
 //                     error: `You can spin the wheel again in ${Math.ceil(timeLeft)} hours.`,
 //                 });
 //             }
@@ -1619,26 +1617,26 @@ app.post('/spell-shop/buy', async (req, res) => {
 //             [finalDiscount, now, userId]
 //         );
 
-//         res.json({
+//         reply.send({
 //             success: true,
 //             message: `You received a ${finalDiscount}% discount!`,
 //             discount: finalDiscount,
 //         });
 //     } catch (err) {
 //         console.error('Error spinning the wheel:', err.message, err.stack);
-//         res.status(500).json({ error: 'Failed to spin the wheel.' });
+//         reply.code(500).send({ error: 'Failed to spin the wheel.' });
 //     }
 // });
 
-app.post('/tower-join', async (req, res) => {
-    let { id, userId } = req.body;
+fastify.post('/tower-join', async (request, reply) => {
+    let { id, userId } = request.body;
 
     // Regular expression to validate UUID v4 format
     const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
     // Validate UUID format for id
     if (!uuidPattern.test(id)) {
-        return res.status(400).json({ error: 'Invalid UUID format for id.' });
+        return reply.code(400).send({ error: 'Invalid UUID format for id.' });
     }
 
     // Force convert userId to integer
@@ -1646,7 +1644,7 @@ app.post('/tower-join', async (req, res) => {
 
     // Validate the conversion result for userId
     if (isNaN(userId) || userId <= 0) {
-        return res.status(400).json({ error: 'Invalid userId. Must be a positive integer.' });
+        return reply.code(400).send({ error: 'Invalid userId. Must be a positive integer.' });
     }
 
     const checkQuery = `
@@ -1678,23 +1676,23 @@ app.post('/tower-join', async (req, res) => {
             console.log(`New player with userId ${userId} added with floor 0.`);
         }
 
-        return res.status(200).json({ message: 'Player processed successfully!' });
+        return reply.code(200).send({ message: 'Player processed successfully!' });
     } catch (error) {
         console.error('Error in tower-join:', error);
-        return res.status(500).json({ error: 'Internal server error.' });
+        return reply.code(500).send({ error: 'Internal server error.' });
     }
 });
 
 
-app.post('/tower-restart', async (req, res) => {
-    let { userId } = req.body;
+fastify.post('/tower-restart', async (request, reply) => {
+    let { userId } = request.body;
 
     // Force convert userId to integer
     userId = parseInt(userId, 10);
 
     // Validate the conversion result for userId
     if (isNaN(userId) || userId <= 0) {
-        return res.status(400).json({ error: 'Invalid userId. Must be a positive integer.' });
+        return reply.code(400).send({ error: 'Invalid userId. Must be a positive integer.' });
     }
 
     const checkQuery = `SELECT * FROM tower_players WHERE userId = ?;`;
@@ -1711,24 +1709,24 @@ app.post('/tower-restart', async (req, res) => {
             // Reset the floor to 0 if the player exists
             await db.query(restartQuery, [userId]);
             console.log(`Floor reset to 0 for userId ${userId}.`);
-            return res.status(200).json({ message: 'Floor reset successfully!' });
+            return reply.code(200).send({ message: 'Floor reset successfully!' });
         } else {
             // User doesn't exist
             console.log(`UserId ${userId} not found.`);
-            return res.status(404).json({ error: 'User does not exist. Cannot restart.' });
+            return reply.code(404).send({ error: 'User does not exist. Cannot restart.' });
         }
 
     } catch (error) {
         console.error('Error in tower-restart:', error);
-        return res.status(500).json({ error: 'Internal server error.' });
+        return reply.code(500).send({ error: 'Internal server error.' });
     }
 });
 
-app.put('/tower-floor-update', async (req, res) => {
-    const { userId, floor } = req.body;
+fastify.put('/tower-floor-update', async (request, reply) => {
+    const { userId, floor } = request.body;
 
     if (!userId || floor === undefined) {
-        return res.status(400).send({ error: "ID and floor are required" });
+        return reply.code(400).send({ error: "ID and floor are required" });
     }
 
     const query = `
@@ -1741,21 +1739,21 @@ app.put('/tower-floor-update', async (req, res) => {
         const [result] = await db.query(query, [floor, userId]);
 
         if (result.affectedRows > 0) {
-            res.status(200).send({ message: `Floor updated successfully for userId: ${userId}` });
+            reply.code(200).send({ message: `Floor updated successfully for userId: ${userId}` });
         } 
 
     } catch (error) {
         console.error("Failed to update floor:", error);
-        res.status(500).send({ error: "Failed to update floor" });
+        reply.code(500).send({ error: "Failed to update floor" });
     }
 });
 
-app.get('/tower-floor', async (req, res) => {
-    let { userId } = req.query;  // Accessing the userId from the query string
+fastify.get('/tower-floor', async (request, reply) => {
+    let { userId } = request.query;  // Accessing the userId from the query string
 
     // Validate if userId is provided
     if (!userId) {
-        return res.status(400).json({ error: 'userId is required.' });
+        return reply.code(400).send({ error: 'userId is required.' });
     }
 
     const query = `
@@ -1767,35 +1765,35 @@ app.get('/tower-floor', async (req, res) => {
         const [rows] = await db.query(query, [parseInt(userId, 10)]);
 
         if (rows.length === 0) {
-            return res.status(200).json({ floor: 0 });
-            // return res.status(404).json({ message: 'Player not found.' });
+            return reply.code(200).send({ floor: 0 });
+            // return reply.code(404).send({ message: 'Player not found.' });
         }
 
-        return res.status(200).json({ floor: rows[0].floor });
+        return reply.code(200).send({ floor: rows[0].floor });
     } catch (error) {
         console.error('Error in tower-floor:', error);
-        return res.status(500).json({ error: 'Internal server error.' });
+        return reply.code(500).send({ error: 'Internal server error.' });
     }
 });
 
 
-app.get('/tower-leaderboard', async (req, res) => {
+fastify.get('/tower-leaderboard', async (request, reply) => {
     try {
         const [leaderboard] = await db.query('SELECT * FROM tower_leaderboard ORDER BY floor DESC');
-        res.json(leaderboard);
+        reply.send(leaderboard);
     } catch (error) {
         console.error('Error fetching leaderboard:', error);
-        res.status(500).json({ message: 'Internal Server Error' });
+        reply.code(500).send({ message: 'Internal Server Error' });
     }
 });
 
 
-app.post('/add-to-tower-leaderboard', async (req, res) => {
+fastify.post('/add-to-tower-leaderboard', async (request, reply) => {
     try {
-        const { username, userId, achievedAt } = req.body;
+        const { username, userId, achievedAt } = request.body;
 
         if (!username || !userId || !achievedAt) {
-            return res.status(400).json({ message: 'Missing required fields' });
+            return reply.code(400).send({ message: 'Missing required fields' });
         }
 
         // Get the floor from tower_players
@@ -1803,7 +1801,7 @@ app.post('/add-to-tower-leaderboard', async (req, res) => {
         const [floorResult] = await db.query(getFloorQuery, [userId]);
 
         if (floorResult.length === 0) {
-            return res.status(404).json({ message: 'User not found in tower_players' });
+            return reply.code(404).send({ message: 'User not found in tower_players' });
         }
 
         const floor = floorResult[0].floor;
@@ -1824,9 +1822,9 @@ app.post('/add-to-tower-leaderboard', async (req, res) => {
 
                 await db.query(updateQuery, [floor, achievedAt, userId]);
 
-                return res.status(200).json({ message: 'Leaderboard updated' });
+                return reply.code(200).send({ message: 'Leaderboard updated' });
             } else {
-                return res.status(200).json({ message: 'New floor is not higher. No update made.' });
+                return reply.code(200).send({ message: 'New floor is not higher. No update made.' });
             }
         } else {
             // User not in leaderboard, insert new record
@@ -1837,19 +1835,19 @@ app.post('/add-to-tower-leaderboard', async (req, res) => {
 
             await db.query(insertQuery, [username, userId, floor, achievedAt]);
 
-            return res.status(201).json({ message: 'Leaderboard entry added' });
+            return reply.code(201).send({ message: 'Leaderboard entry added' });
         }
 
     } catch (error) {
         console.error('Error interacting with the database:', error);
-        res.status(500).json({ message: 'Failed to interact with the database', error });
+        reply.code(500).send({ message: 'Failed to interact with the database', error });
     }
 });
 
 
-app.post('/vows', async (req, res) => {
+fastify.post('/vows', async (request, reply) => {
     try {
-      const { name, description, selectedStats, difficulty, created_by, deadline } = req.body;
+      const { name, description, selectedStats, difficulty, created_by, deadline } = request.body;
   
       // Reward configurations
       const xpRewards = [10, 20, 30, 40, 50];
@@ -1860,7 +1858,7 @@ app.post('/vows', async (req, res) => {
       const [userCheckResult] = await db.query(userCheckQuery, [created_by]);
   
       if (userCheckResult[0].count === 0) {
-        return res.status(404).json({ error: 'User does not exist' });
+        return reply.code(404).send({ error: 'User does not exist' });
       }
   
       // Check active vow count for the user (excluding completed vows)
@@ -1872,7 +1870,7 @@ app.post('/vows', async (req, res) => {
       const [vowCountResult] = await db.query(vowCountQuery, [created_by]);
   
     //   if (vowCountResult[0].vowCount >= 3) {
-    //     return res.status(403).json({ error: 'Vow limit exceeded. You can only have up to 3 active vows.' });
+    //     return reply.code(403).send({ error: 'Vow limit exceeded. You can only have up to 3 active vows.' });
     //   }
   
       // Check if there are already 3 vows with the same created_at date
@@ -1885,12 +1883,12 @@ app.post('/vows', async (req, res) => {
       const [dateVowCountResult] = await db.query(vowDateCountQuery, [created_by, created_at]);
   
       if (dateVowCountResult[0].dateVowCount >= 3) {
-        return res.status(403).json({ error: 'You can only create up to 3 vows per day.' });
+        return reply.code(403).send({ error: 'You can only create up to 3 vows per day.' });
       }
   
       // Validate difficulty index range
       if (difficulty < 1 || difficulty > xpRewards.length) {
-        return res.status(400).json({ error: 'Invalid difficulty level' });
+        return reply.code(400).send({ error: 'Invalid difficulty level' });
       }
   
       // Calculate experience reward
@@ -1922,20 +1920,20 @@ app.post('/vows', async (req, res) => {
         deadline
       ]);
   
-      res.status(201).json({ message: 'Vow added successfully' });
+      reply.code(201).send({ message: 'Vow added successfully' });
   
     } catch (error) {
       console.error('Error adding vow:', error);
-      res.status(500).json({ error: 'Failed to add vow' });
+      reply.code(500).send({ error: 'Failed to add vow' });
     }
 });
   
 // GET: Fetch vows for a specific user
-app.get('/vows', async (req, res) => {
-    const { userId } = req.query;
+fastify.get('/vows', async (request, reply) => {
+    const { userId } = request.query;
 
     if (!userId) {
-        return res.status(400).json({ error: 'User ID is required' });
+        return reply.code(400).send({ error: 'User ID is required' });
     }
 
     try {
@@ -1950,17 +1948,17 @@ app.get('/vows', async (req, res) => {
             'END, created_at DESC',
             [userId]
         );        
-        res.json(rows);
+        reply.send(rows);
     } catch (error) {
         console.error('Error fetching vows:', error);
-        res.status(500).json({ error: 'Failed to fetch vows' });
+        reply.code(500).send({ error: 'Failed to fetch vows' });
     }
 });
 
 
 
-app.post('/vows/finish', async (req, res) => {
-    const { vowId, userId, completedDate } = req.body;
+fastify.post('/vows/finish', async (request, reply) => {
+    const { vowId, userId, completedDate } = request.body;
 
     try {
 
@@ -1972,7 +1970,7 @@ app.post('/vows/finish', async (req, res) => {
         //     [questId, userId, completionDate]
         // );
         // if (existing.length > 0) {
-        //     return res.status(400).json({ error: 'Quest already completed today.' });
+        //     return reply.code(400).send({ error: 'Quest already completed today.' });
         // }
 
         // Retrieve the quest's rewards (experience, item, and stat rewards)
@@ -1981,7 +1979,7 @@ app.post('/vows/finish', async (req, res) => {
             [vowId]
         );
         if (quest.length === 0) {
-            return res.status(404).json({ error: 'Quest not found.' });
+            return reply.code(404).send({ error: 'Quest not found.' });
         }
 
         const { experience_reward: experienceReward, stat_reward: statReward } = quest[0];
@@ -2033,22 +2031,22 @@ app.post('/vows/finish', async (req, res) => {
             );
         }
 
-        res.json({ success: true, message: 'Quest marked as finished and rewards applied.' });
+        reply.send({ success: true, message: 'Quest marked as finished and rewards applied.' });
     } catch (err) {
         console.error('Error finishing quest:', err);
-        res.status(500).json({ error: 'Failed to mark quest as finished.' });
+        reply.code(500).send({ error: 'Failed to mark quest as finished.' });
     }
 });
 
-app.get('/completed-quests-stats', async (req, res) => {
-    const { userId, date } = req.query;
+fastify.get('/completed-quests-stats', async (request, reply) => {
+    const { userId, date } = request.query;
 
     if (!userId) {
-        return res.status(400).json({ error: 'User ID is required' });
+        return reply.code(400).send({ error: 'User ID is required' });
     }
 
     if (!date) {
-        return res.status(400).json({ error: 'Date is required' });
+        return reply.code(400).send({ error: 'Date is required' });
     }
 
     try {
@@ -2085,7 +2083,7 @@ app.get('/completed-quests-stats', async (req, res) => {
                 const dateStr = day.toISOString().split('T')[0];
                 return { date: dateStr, stats: { strength: 0, bravery: 0, intelligence: 0, endurance: 0 } };
             });
-            return res.json(result);
+            return reply.send(result);
         }
 
         const questIds = questParticipants.map(qp => qp.quest_id);
@@ -2139,14 +2137,14 @@ app.get('/completed-quests-stats', async (req, res) => {
             return { date: dateStr, stats };
         });
         
-        res.json(result);
+        reply.send(result);
     } catch (error) {
         console.error('Error fetching completed quests and vows stats:', error);
-        res.status(500).json({ error: 'Failed to fetch stats' });
+        reply.code(500).send({ error: 'Failed to fetch stats' });
     }
 });
 
-app.get('/total-completed-quests-stats', async (req, res) => {
+fastify.get('/total-completed-quests-stats', async (request, reply) => {
     try {
         // Get the current date and the date 7 days ago
         const currentDate = new Date();
@@ -2184,7 +2182,7 @@ app.get('/total-completed-quests-stats', async (req, res) => {
 
         if (questParticipants.length === 0 && vows.length === 0) {
             // Return stats with zero values for the week if no quests or vows completed
-            return res.json({ stats: { strength: 0, bravery: 0, intelligence: 0, endurance: 0 } });
+            return reply.send({ stats: { strength: 0, bravery: 0, intelligence: 0, endurance: 0 } });
         }
 
         // Get all the quest stat_rewards for the fetched quest_ids
@@ -2255,27 +2253,27 @@ app.get('/total-completed-quests-stats', async (req, res) => {
         console.log(totalStats);
 
         // Return the median stats for the week for all users
-        res.json({ stats: totalStats });
+        reply.send({ stats: totalStats });
     } catch (error) {
         console.error('Error fetching completed quests and vows stats:', error);
-        res.status(500).json({ error: 'Failed to fetch stats' });
+        reply.code(500).send({ error: 'Failed to fetch stats' });
     }
 });
 
-app.get('/spells', async (req, res) => {
+fastify.get('/spells', async (request, reply) => {
     try {
         const [ spells ] = await db.query(`
             SELECT * FROM spells 
         `);
-        res.json(spells);
+        reply.send(spells);
     } catch (error) {
         console.error('Error fetching leaderboard:', error);
-        res.status(500).json({ message: 'Internal Server Error' });
+        reply.code(500).send({ message: 'Internal Server Error' });
     }
 });
 
-app.post('/updateSpells', async (req, res) => {
-    const { userId, spellSlots } = req.body; // Destructure from request body
+fastify.post('/updateSpells', async (request, reply) => {
+    const { userId, spellSlots } = request.body; // Destructure from request body
 
     // Prepare spell list while maintaining order
     const orderedSpells = [
@@ -2295,19 +2293,19 @@ app.post('/updateSpells', async (req, res) => {
             WHERE id = ?;
         `;
         db.query(query, [spellsString, userId]);
-        res.json({ message: 'Spells updated successfully' });
+        reply.send({ message: 'Spells updated successfully' });
     } catch (error) {
         console.error('Error updating spells:', error);
-        res.status(500).json({ message: 'Internal Server Error' });
+        reply.code(500).send({ message: 'Internal Server Error' });
     }
 });
 
-app.post('/getSpellData', async (req, res) => {
-    const { spellName } = req.body; // Destructure spell name from request body
+fastify.post('/getSpellData', async (request, reply) => {
+    const { spellName } = request.body; // Destructure spell name from request body
 
     // Check if spell name is provided
     if (!spellName) {
-        return res.status(400).json({ message: 'Spell name is required' });
+        return reply.code(400).send({ message: 'Spell name is required' });
     }
 
     try {
@@ -2321,19 +2319,19 @@ app.post('/getSpellData', async (req, res) => {
 
         // Check if spell exists
         if (spellData.length === 0) {
-            return res.status(404).json({ message: 'Spell not found' });
+            return reply.code(404).send({ message: 'Spell not found' });
         }
 
         // Respond with the spell data
-        res.json(spellData[0]);
+        reply.send(spellData[0]);
     } catch (error) {
         console.error('Error fetching spell data:', error);
-        res.status(500).json({ message: 'Internal Server Error' });
+        reply.code(500).send({ message: 'Internal Server Error' });
     }
 });
 
-app.get('/garden', async (req, res) => { 
-    const { userId } = req.query;
+fastify.get('/garden', async (request, reply) => { 
+    const { userId } = request.query;
     
     try {
         const [gardens] = await db.query(`
@@ -2400,15 +2398,15 @@ app.get('/garden', async (req, res) => {
             
         }
 
-        res.json(gardens);
+        reply.send(gardens);
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Failed to fetch garden data" });
+        reply.code(500).send({ error: "Failed to fetch garden data" });
     }
 });
 
-app.get('/plant', async (req, res) => {
-    const { userId, plantId } = req.query;
+fastify.get('/plant', async (request, reply) => {
+    const { userId, plantId } = request.query;
 
     try {
         // Select plant details with row lock removed (no transaction)
@@ -2423,7 +2421,7 @@ app.get('/plant', async (req, res) => {
         );
 
         if (gardens.length === 0) {
-            return res.status(404).json({ error: "Garden not found" });
+            return reply.code(404).send({ error: "Garden not found" });
         }
 
         const plant = gardens[0];
@@ -2473,16 +2471,16 @@ app.get('/plant', async (req, res) => {
             [newTotalProgress, plant.wilt_time, plant.id, userId]
         );
 
-        res.json({ ...plant, next_water_time: new Date(nextWaterTime * 1000) });
+        reply.send({ ...plant, next_water_time: new Date(nextWaterTime * 1000) });
 
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Failed to fetch and update garden data" });
+        reply.code(500).send({ error: "Failed to fetch and update garden data" });
     }
 });
 
-app.post('/garden/plant', async (req, res) => {
-    const { userId, seedId } = req.body;
+fastify.post('/garden/plant', async (request, reply) => {
+    const { userId, seedId } = request.body;
     const now = new Date();
 
     try {
@@ -2490,7 +2488,7 @@ app.post('/garden/plant', async (req, res) => {
         const [userRows] = await db.query(`SELECT inventory FROM users WHERE id = ?`, [userId]);
 
         if (userRows.length === 0) {
-            return res.status(404).json({ error: "User not found" });
+            return reply.code(404).send({ error: "User not found" });
         }
 
         let inventory = JSON.parse(userRows[0].inventory); // Assuming inventory is stored as a JSON string
@@ -2498,7 +2496,7 @@ app.post('/garden/plant', async (req, res) => {
         // Check if the seed exists in the inventory
         const seedIndex = inventory.findIndex(item => item.id === seedId && item.type === 'seed');
         if (seedIndex === -1) {
-            return res.status(400).json({ error: "You don't have this seed in your inventory" });
+            return reply.code(400).send({ error: "You don't have this seed in your inventory" });
         }
 
         // Reduce quantity or remove seed entirely
@@ -2514,7 +2512,7 @@ app.post('/garden/plant', async (req, res) => {
         // Fetch the seed info from the seeds table
         const [seedRows] = await db.query(`SELECT growth_time, wilt_time FROM seeds WHERE id = ?`, [seedId]);
         if (seedRows.length === 0) {
-            return res.status(404).json({ error: "Seed not found" });
+            return reply.code(404).send({ error: "Seed not found" });
         }
         const seedInfo = seedRows[0];
 
@@ -2533,16 +2531,16 @@ app.post('/garden/plant', async (req, res) => {
             [userId, seedId, now, now, null, 0, nextWaterTime]
         );
 
-        res.json({ message: "Seed planted and inventory updated!" });
+        reply.send({ message: "Seed planted and inventory updated!" });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Failed to plant seed" });
+        reply.code(500).send({ error: "Failed to plant seed" });
     }
 });
 
 // Water a plant
-app.post('/garden/water', async (req, res) => {
-    const { userId, gardenId } = req.body; // Removed lastWateredAt from the request
+fastify.post('/garden/water', async (request, reply) => {
+    const { userId, gardenId } = request.body; // Removed lastWateredAt from the request
 
     try {
         // Fetch plant details
@@ -2553,7 +2551,7 @@ app.post('/garden/water', async (req, res) => {
 
         
         if (plantRows.length === 0) {
-            return res.status(404).json({ error: "Plant not found" });
+            return reply.code(404).send({ error: "Plant not found" });
         }
 
         const plant = plantRows[0];
@@ -2584,17 +2582,17 @@ app.post('/garden/water', async (req, res) => {
             [now, nextWaterTime, gardenId, userId]
         );
 
-        res.json({ message: "Plant watered and is now growing!", status: "growing" });
+        reply.send({ message: "Plant watered and is now growing!", status: "growing" });
 
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Failed to water plant" });
+        reply.code(500).send({ error: "Failed to water plant" });
     }
 });
 
 // Harvest a plant
-app.post('/garden/harvest', async (req, res) => {
-    const { userId, gardenId } = req.body;
+fastify.post('/garden/harvest', async (request, reply) => {
+    const { userId, gardenId } = request.body;
 
     try {
         // Fetch the plant details
@@ -2604,7 +2602,7 @@ app.post('/garden/harvest', async (req, res) => {
         );
 
         if (plantRows.length === 0) {
-            return res.status(400).json({ error: "Plant not found in garden" });
+            return reply.code(400).send({ error: "Plant not found in garden" });
         }
 
         const plant = plantRows[0];
@@ -2616,21 +2614,21 @@ app.post('/garden/harvest', async (req, res) => {
         );
 
         if (seedRows.length === 0) {
-            return res.status(404).json({ error: "Seed data not found" });
+            return reply.code(404).send({ error: "Seed data not found" });
         }
 
         const seed = seedRows[0];
 
         // Check if plant is fully grown
         if (plant.total_progress < seed.growth_time) {
-            return res.status(400).json({ error: "Plant is not fully grown yet!" });
+            return reply.code(400).send({ error: "Plant is not fully grown yet!" });
         }
 
         // Fetch the user's current inventory
         const [userRows] = await db.query(`SELECT inventory FROM users WHERE id = ?`, [userId]);
 
         if (userRows.length === 0) {
-            return res.status(404).json({ error: "User not found" });
+            return reply.code(404).send({ error: "User not found" });
         }
 
         let inventory = JSON.parse(userRows[0].inventory || '[]'); // Ensure it's an array
@@ -2657,52 +2655,52 @@ app.post('/garden/harvest', async (req, res) => {
         // Remove plant from garden
         await db.query(`DELETE FROM player_garden WHERE id = ?`, [gardenId]);
 
-        res.json({ message: `You received 1 ${seed.name} seed and 1 ${seed.material}!` });
+        reply.send({ message: `You received 1 ${seed.name} seed and 1 ${seed.material}!` });
 
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Failed to harvest plant" });
+        reply.code(500).send({ error: "Failed to harvest plant" });
     }
 });
 
 
-app.get('/seeds', async (req, res) => {
-    const { id } = req.params;  // Get the itemId from the request parameter
+fastify.get('/seeds', async (request, reply) => {
+    const { id } = request.params;  // Get the itemId from the request parameter
 
     try {
         // Query to fetch the item from the database
         const results = await db.query('SELECT * FROM seeds');
 
         if (results.length > 0) {
-            res.json(results[0]);  // Return the item as JSON if found
+            reply.send(results[0]);  // Return the item as JSON if found
         } else {
-            res.status(404).json({ error: 'Seed not found' });  // Item not found
+            reply.code(404).send({ error: 'Seed not found' });  // Item not found
         }
     } catch (error) {
         console.error('Error fetching seed:', error);
-        res.status(500).json({ error: 'Database error' });
+        reply.code(500).send({ error: 'Database error' });
     }
 });
 
-app.get('/seed/:id', async (req, res) => {
-    const { id } = req.params;  // Get the itemId from the request parameter
+fastify.get('/seed/:id', async (request, reply) => {
+    const { id } = request.params;  // Get the itemId from the request parameter
 
     try {
         // Query to fetch the item from the database
         const results = await db.query('SELECT * FROM seeds WHERE id = ?', [id]);
 
         if (results.length > 0) {
-            res.json(results[0]);  // Return the item as JSON if found
+            reply.send(results[0]);  // Return the item as JSON if found
         } else {
-            res.status(404).json({ error: 'Seed not found' });  // Item not found
+            reply.code(404).send({ error: 'Seed not found' });  // Item not found
         }
     } catch (error) {
         console.error('Error fetching seed:', error);
-        res.status(500).json({ error: 'Database error' });
+        reply.code(500).send({ error: 'Database error' });
     }
 });
 
-app.get("/craftable-items", async (req, res) => {
+fastify.get("/craftable-items", async (request, reply) => {
     try {
         const [result] = await db.query("SELECT * FROM craftable_items");
         // Convert recipe from text to JSON
@@ -2711,14 +2709,14 @@ app.get("/craftable-items", async (req, res) => {
             recipe: JSON.parse(item.recipe) // Convert text to JSON
         }));
 
-        res.json(formattedItems);
+        reply.send(formattedItems);
     } catch (error) {
-        res.status(500).json({ error: "Failed to fetch craftable items" });
+        reply.code(500).send({ error: "Failed to fetch craftable items" });
     }
 });
 
-app.post('/craft', async (req, res) => {
-    const { userId, itemId, quantity } = req.body;
+fastify.post('/craft', async (request, reply) => {
+    const { userId, itemId, quantity } = request.body;
 
     try {
         // Fetch craftable item details
@@ -2728,7 +2726,7 @@ app.post('/craft', async (req, res) => {
         );
 
         if (craftableRows.length === 0) {
-            return res.status(404).json({ error: "Craftable item not found" });
+            return reply.code(404).send({ error: "Craftable item not found" });
         }
 
         const craftableItem = craftableRows[0];
@@ -2739,7 +2737,7 @@ app.post('/craft', async (req, res) => {
         const [userRows] = await db.query(`SELECT inventory FROM users WHERE id = ?`, [userId]);
 
         if (userRows.length === 0) {
-            return res.status(404).json({ error: "User not found" });
+            return reply.code(404).send({ error: "User not found" });
         }
 
         let inventory = JSON.parse(userRows[0].inventory || '[]'); // Ensure it's an array
@@ -2748,7 +2746,7 @@ app.post('/craft', async (req, res) => {
         for (const [material, reqQty] of Object.entries(recipe)) {
             const materialItem = inventory.find(item => item.name === material && item.type === 'material');
             if (!materialItem || materialItem.quantity < reqQty * quantity) {
-                return res.status(400).json({ error: `Not enough ${material} to craft ${craftableItem.name}` });
+                return reply.code(400).send({ error: `Not enough ${material} to craft ${craftableItem.name}` });
             }
         }
 
@@ -2774,23 +2772,23 @@ app.post('/craft', async (req, res) => {
         // Update the user's inventory in the database
         await db.query(`UPDATE users SET inventory = ? WHERE id = ?`, [JSON.stringify(inventory), userId]);
 
-        res.json({ message: `Successfully crafted ${quantity} ${craftableItem.name}` });
+        reply.send({ message: `Successfully crafted ${quantity} ${craftableItem.name}` });
 
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Failed to craft item" });
+        reply.code(500).send({ error: "Failed to craft item" });
     }
 });
 
-app.post('/consume', async (req, res) => {
-    const { userId, itemId, quantity } = req.body;
+fastify.post('/consume', async (request, reply) => {
+    const { userId, itemId, quantity } = request.body;
 
     try {
         // Fetch user's inventory
         const [userRows] = await db.query(`SELECT inventory FROM users WHERE id = ?`, [userId]);
 
         if (userRows.length === 0) {
-            return res.status(404).json({ error: "User not found" });
+            return reply.code(404).send({ error: "User not found" });
         }
 
         let inventory = JSON.parse(userRows[0].inventory || '[]'); // Ensure it's an array
@@ -2799,11 +2797,11 @@ app.post('/consume', async (req, res) => {
         let consumableItem = inventory.find(item => item.name === itemId && item.type === 'consumable');
 
         if (!consumableItem) {
-            return res.status(400).json({ error: "Item not found or not consumable" });
+            return reply.code(400).send({ error: "Item not found or not consumable" });
         }
 
         if (consumableItem.quantity < quantity) {
-            return res.status(400).json({ error: `Not enough ${consumableItem.name} to consume` });
+            return reply.code(400).send({ error: `Not enough ${consumableItem.name} to consume` });
         }
 
         // Extract item stats before consuming
@@ -2820,43 +2818,43 @@ app.post('/consume', async (req, res) => {
         // Update the user's inventory in the database
         await db.query(`UPDATE users SET inventory = ? WHERE id = ?`, [JSON.stringify(inventory), userId]);
 
-        res.json({
+        reply.send({
             message: `Successfully consumed ${quantity} ${consumableItem.name}`,
             stats: itemStats,
         });
 
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Failed to consume item" });
+        reply.code(500).send({ error: "Failed to consume item" });
     }
 });
 
-app.get("/perks", async (req, res) => {
+fastify.get("/perks", async (request, reply) => {
     try {
         const [result] = await db.query("SELECT * FROM perks");
-        res.json(result);
+        reply.send(result);
     } catch (error) {
-        res.status(500).json({ error: "Failed to fetch craftable items" });
+        reply.code(500).send({ error: "Failed to fetch craftable items" });
     }
 });
 
-app.get("/perks/:name", async (req, res) => {
+fastify.get("/perks/:name", async (request, reply) => {
     try {
-        const { name } = req.params;
+        const { name } = request.params;
         const [result] = await db.query("SELECT * FROM perks WHERE name = ?", [name]);
 
         if (result.length === 0) {
-            return res.status(404).json({ error: "Perk not found" });
+            return reply.code(404).send({ error: "Perk not found" });
         }
 
-        res.json(result[0]);
+        reply.send(result[0]);
     } catch (error) {
-        res.status(500).json({ error: "Failed to fetch perk" });
+        reply.code(500).send({ error: "Failed to fetch perk" });
     }
 });
 
-app.post('/choose-perk', async (req, res) => {
-    const { userId, perkName } = req.body;
+fastify.post('/choose-perk', async (request, reply) => {
+    const { userId, perkName } = request.body;
 
     try {
         // ✅ Check if the perk exists and fetch its point cost and type
@@ -2865,7 +2863,7 @@ app.post('/choose-perk', async (req, res) => {
         );
 
         if (perkCheck.length === 0) {
-            return res.status(404).json({ error: "Perk does not exist" });
+            return reply.code(404).send({ error: "Perk does not exist" });
         }
 
         const { pointCost, type } = perkCheck[0];
@@ -2877,7 +2875,7 @@ app.post('/choose-perk', async (req, res) => {
         );
 
         if (userRows.length === 0) {
-            return res.status(404).json({ error: "User not found" });
+            return reply.code(404).send({ error: "User not found" });
         }
 
         let perks = JSON.parse(userRows[0].perks || '[]'); // Ensure it's an array
@@ -2885,12 +2883,12 @@ app.post('/choose-perk', async (req, res) => {
 
         // ✅ Check if the user has enough perk points
         if (currentPerkPoints < pointCost) {
-            return res.status(400).json({ error: "Not enough perk points" });
+            return reply.code(400).send({ error: "Not enough perk points" });
         }
 
         // ✅ Check if the user already has the perk
         if (perks.some(perk => perk.perkName === perkName)) {
-            return res.status(400).json({ error: "Perk already chosen" });
+            return reply.code(400).send({ error: "Perk already chosen" });
         }
 
         // ✅ Add the new perk with the fetched 'type'
@@ -2905,7 +2903,7 @@ app.post('/choose-perk', async (req, res) => {
             [JSON.stringify(perks), updatedPerkPoints, userId]
         );
 
-        res.json({ 
+        reply.send({ 
             message: `Successfully added perk: ${perkName}`, 
             type,
             remainingPerkPoints: updatedPerkPoints 
@@ -2913,20 +2911,20 @@ app.post('/choose-perk', async (req, res) => {
 
     } catch (err) {
         console.error(err);
-        res.status(500).json({ error: "Failed to save perk" });
+        reply.code(500).send({ error: "Failed to save perk" });
     }
 });
 
 
-app.post("/claim-perk-point", async (req, res) => {
-    const { userId, stat, milestone } = req.body;
+fastify.post("/claim-perk-point", async (request, reply) => {
+    const { userId, stat, milestone } = request.body;
 
     try {
         // Fetch current user data
         const [rows] = await db.query("SELECT perkPoints, claimedMilestones FROM users WHERE id = ?", [userId]);
 
         if (!rows.length) {
-            return res.status(404).json({ error: "User not found" });
+            return reply.code(404).send({ error: "User not found" });
         }
 
         let user = rows[0]; // Extract user data from the first row
@@ -2935,7 +2933,7 @@ app.post("/claim-perk-point", async (req, res) => {
 
         // Check if milestone is already claimed
         if (claimedMilestones.some(m => m.stat === stat && m.milestone === milestone)) {
-            return res.status(400).json({ error: "Milestone already claimed" });
+            return reply.code(400).send({ error: "Milestone already claimed" });
         }
 
         // Increment perk points and update claimed milestones
@@ -2948,22 +2946,22 @@ app.post("/claim-perk-point", async (req, res) => {
             userId
         ]);
 
-        res.json({ message: "Perk point claimed!", perkPoints: updatedPerkPoints, claimedMilestones });
+        reply.send({ message: "Perk point claimed!", perkPoints: updatedPerkPoints, claimedMilestones });
     } catch (error) {
         console.error("Error updating perk points:", error);
-        res.status(500).json({ error: "Internal server error" });
+        reply.code(500).send({ error: "Internal server error" });
     }
 });
 
-app.post("/remove-perk", async (req, res) => {
-    const { userId, perkName, refundPoints } = req.body;
+fastify.post("/remove-perk", async (request, reply) => {
+    const { userId, perkName, refundPoints } = request.body;
 
     try {
         // Fetch the current perks and perk points
         const [user] = await db.query(`SELECT perks, perkPoints FROM users WHERE id = ?`, [userId]);
         
         if (!user || user.length === 0) {
-            return res.status(404).json({ error: "User not found" });
+            return reply.code(404).send({ error: "User not found" });
         }
 
         let userPerks = JSON.parse(user[0].perks);
@@ -2978,61 +2976,62 @@ app.post("/remove-perk", async (req, res) => {
             [JSON.stringify(userPerks), newPerkPoints, userId]
         );
 
-        res.json({ success: true, newPerks: userPerks, newPerkPoints });
+        reply.send({ success: true, newPerks: userPerks, newPerkPoints });
     } catch (error) {
         console.error("Error removing perk:", error);
-        res.status(500).json({ error: "Internal Server Error" });
+        reply.code(500).send({ error: "Internal Server Error" });
     }
 });
 
-app.get("/guilds", async (req, res) => {
+fastify.get("/guilds", async (request, reply) => {
     try {
         const [result] = await db.query("SELECT * FROM guilds");
-        res.json(result);
+        reply.send(result);
     } catch (error) {
-        res.status(500).json({ error: "Failed to fetch craftable items" });
+        reply.code(500).send({ error: "Failed to fetch craftable items" });
     }
 });
 
-app.get("/user-guild", async (req, res) => {
+fastify.get("/user-guild", async (request, reply) => {
     try {
-        const { name, userId } = req.query; // Get both the guild name and userId from the query parameters
-        
-        if (!name || !userId) {
-            return res.status(400).json({ error: "Guild name and user ID are required" });
-        }
-
-        // Query to fetch the guild by name
-        const [result] = await db.query("SELECT * FROM guilds WHERE name = ?", [name]);
-
-        if (result.length === 0) {
-            return res.status(404).json({ error: "Guild not found" });
-        }
-
-        // Parse the members array from the database result
-        const members = JSON.parse(result[0].members);
-
-        // Check if the user is a member of the guild
-        const isMember = members.some(member => Number(member.userId) === Number(userId));
-
-        if (!isMember) {
-            return res.status(403).json({ error: "User is not a member of this guild" });
-        }
-
-        res.json(result[0]); // Return the guild details
+      const { name, userId } = request.query; // Get both the guild name and userId from the query parameters
+  
+      if (!name || !userId) {
+        return reply.code(400).send({ error: "Guild name and user ID are required" });
+      }
+  
+      // Query to fetch the guild by name
+      const [result] = await db.query("SELECT * FROM guilds WHERE name = ?", [name]);
+  
+      if (result.length === 0) {
+        return reply.code(404).send({ error: "Guild not found" });
+      }
+  
+      // Parse the members array from the database result
+      const members = JSON.parse(result[0].members);
+  
+      // Check if the user is a member of the guild
+      const isMember = members.some(member => Number(member.userId) === Number(userId));
+  
+      if (!isMember) {
+        return reply.code(403).send({ error: "User is not a member of this guild" });
+      }
+  
+      reply.send(result[0]); // Return the guild details
     } catch (error) {
-        console.error("Error fetching guild:", error);
-        res.status(500).json({ error: "Failed to fetch guild" });
+      console.error("Error fetching guild:", error);
+      return reply.code(500).send({ error: "Failed to fetch guild" });
     }
-});
+  });
+  
 
-app.post('/create-guild', async (req, res) => {
+fastify.post('/create-guild', async (request, reply) => {
     try {
-        const { name, description, privacy, created_by } = req.body;
+        const { name, description, privacy, created_by } = request.body;
 
         // Validate required fields
         if (!name || !description || !privacy || !created_by) {
-            return res.status(400).json({ error: 'Missing required fields' });
+            return reply.code(400).send({ error: 'Missing required fields' });
         }
 
         // Fetch user data: currency, guild, and username
@@ -3040,19 +3039,19 @@ app.post('/create-guild', async (req, res) => {
         const [userResult] = await db.query(userCheckQuery, [created_by]);
 
         if (userResult.length === 0) {
-            return res.status(404).json({ error: 'User does not exist' });
+            return reply.code(404).send({ error: 'User does not exist' });
         }
 
         const { currency: userGold, guild, username } = userResult[0];
 
         // Check if the user is already in a guild
         if (guild && guild.trim() !== '') {
-            return res.status(403).json({ error: 'You are already in a guild and cannot create another one.' });
+            return reply.code(403).send({ error: 'You are already in a guild and cannot create another one.' });
         }
 
         // Check if the user has at least 50,000 gold
         if (userGold < 50000) {
-            return res.status(403).json({ error: 'Insufficient gold. You need at least 50,000 gold to create a guild.' });
+            return reply.code(403).send({ error: 'Insufficient gold. You need at least 50,000 gold to create a guild.' });
         }
 
         // Deduct 50,000 gold from user's balance and set guild name
@@ -3065,7 +3064,7 @@ app.post('/create-guild', async (req, res) => {
         const [guildCountResult] = await db.query(guildCountQuery, [name]);
 
         if (guildCountResult[0].guildCount > 0) {
-            return res.status(403).json({ error: 'This guild name already exists, choose a different name.' });
+            return reply.code(403).send({ error: 'This guild name already exists, choose a different name.' });
         }
 
         // Prepare members array with the creator as an admin
@@ -3087,21 +3086,21 @@ app.post('/create-guild', async (req, res) => {
             20
         ]);
 
-        res.status(201).json({ message: 'Guild created successfully', newBalance });
+        reply.code(201).send({ message: 'Guild created successfully', newBalance });
 
     } catch (error) {
         console.error('Error creating guild:', error);
-        res.status(500).json({ error: 'Failed to create guild' });
+        reply.code(500).send({ error: 'Failed to create guild' });
     }
 });
 
 
-app.post('/join-guild', async (req, res) => {
+fastify.post('/join-guild', async (request, reply) => {
     try {
-        const { name, userId } = req.body;
+        const { name, userId } = request.body;
 
         if (!name || !userId) {
-            return res.status(400).json({ error: 'Guild name, userId, and username are required' });
+            return reply.code(400).send({ error: 'Guild name, userId, and username are required' });
         }
 
         // Check if the user exists
@@ -3109,7 +3108,7 @@ app.post('/join-guild', async (req, res) => {
         const [userCheckResult] = await db.query(userCheckQuery, [userId]);
 
         if (userCheckResult[0].count === 0) {
-            return res.status(404).json({ error: 'User does not exist' });
+            return reply.code(404).send({ error: 'User does not exist' });
         }
 
         // Check if the user is already in another guild
@@ -3117,7 +3116,7 @@ app.post('/join-guild', async (req, res) => {
         const [userGuildResult] = await db.query(userGuildCheckQuery, [userId]);
 
         if (userGuildResult[0].guild) {
-            return res.status(403).json({ error: 'User is already in another guild' });
+            return reply.code(403).send({ error: 'User is already in another guild' });
         }
 
         // Fetch the target guild by name
@@ -3125,13 +3124,13 @@ app.post('/join-guild', async (req, res) => {
         const [guildResult] = await db.query(guildQuery, [name]);
 
         if (guildResult.length === 0) {
-            return res.status(404).json({ error: 'Guild not found' });
+            return reply.code(404).send({ error: 'Guild not found' });
         }
 
         let { members, request_list, privacy } = guildResult[0];
 
         if (!privacy || (privacy !== 'public' && privacy !== 'private')) {
-            return res.status(500).json({ error: 'Guild privacy setting is invalid' });
+            return reply.code(500).send({ error: 'Guild privacy setting is invalid' });
         }
 
         // Parse JSON fields
@@ -3140,12 +3139,12 @@ app.post('/join-guild', async (req, res) => {
 
         // Check if the guild has reached maximum capacity (50 members)
         if (members.length >= 50) {
-            return res.status(403).json({ error: 'Maximum guild capacity reached (50 members)' });
+            return reply.code(403).send({ error: 'Maximum guild capacity reached (50 members)' });
         }
 
         // Check if the user is already a member
         if (members.some(member => member.userId === userId)) {
-            return res.status(400).json({ error: 'User is already a member of this guild' });
+            return reply.code(400).send({ error: 'User is already a member of this guild' });
         }
 
         if (privacy === "public") {
@@ -3160,10 +3159,10 @@ app.post('/join-guild', async (req, res) => {
             const updateUserQuery = 'UPDATE users SET guild = ? WHERE id = ?';
             await db.query(updateUserQuery, [name, userId]);
 
-            return res.status(200).json({ message: 'User successfully joined the guild' });
+            return reply.code(200).send({ message: 'User successfully joined the guild' });
         } else if (privacy === "private") {
             // If private, add user to the request list
-            if (!request_list.some(req => req.userId === userId)) {
+            if (!request_list.some(request => request.userId === userId)) {
                 request_list.push({ userId, username: userGuildResult[0].username });
             }
 
@@ -3171,21 +3170,21 @@ app.post('/join-guild', async (req, res) => {
             const updateRequestQuery = 'UPDATE guilds SET request_list = ? WHERE name = ?';
             await db.query(updateRequestQuery, [JSON.stringify(request_list), name]);
 
-            return res.status(200).json({ message: 'Request sent to join the guild' });
+            return reply.code(200).send({ message: 'Request sent to join the guild' });
         }
     } catch (error) {
         console.error('Error joining guild:', error);
-        res.status(500).json({ error: 'Failed to join the guild' });
+        reply.code(500).send({ error: 'Failed to join the guild' });
     }
 });
 
 
-app.post('/leave-guild', async (req, res) => {
+fastify.post('/leave-guild', async (request, reply) => {
     try {
-        const { name, userId } = req.body;
+        const { name, userId } = request.body;
 
         if (!name || !userId) {
-            return res.status(400).json({ error: 'Guild name and userId are required' });
+            return reply.code(400).send({ error: 'Guild name and userId are required' });
         }
 
         // Fetch guild data
@@ -3193,7 +3192,7 @@ app.post('/leave-guild', async (req, res) => {
         const [guildResult] = await db.query(guildQuery, [name]);
 
         if (guildResult.length === 0) {
-            return res.status(404).json({ error: 'Guild not found' });
+            return reply.code(404).send({ error: 'Guild not found' });
         }
 
         let members = JSON.parse(guildResult[0].members);
@@ -3201,7 +3200,7 @@ app.post('/leave-guild', async (req, res) => {
         // Check if user is in the guild
         const userIndex = members.findIndex(member => Number(member.userId) === Number(userId));
         if (userIndex === -1) {
-            return res.status(400).json({ error: 'User is not a member of this guild' });
+            return reply.code(400).send({ error: 'User is not a member of this guild' });
         }
 
         const isAdmin = members[userIndex].role === "admin";
@@ -3218,7 +3217,7 @@ app.post('/leave-guild', async (req, res) => {
             const updateUserQuery = 'UPDATE users SET guild = NULL WHERE id = ?';
             await db.query(updateUserQuery, [userId]);
 
-            return res.status(200).json({ message: 'Guild deleted as no members are left' });
+            return reply.code(200).send({ message: 'Guild deleted as no members are left' });
         }
 
         if (isAdmin) {
@@ -3239,21 +3238,21 @@ app.post('/leave-guild', async (req, res) => {
         const updateUserQuery = 'UPDATE users SET guild = NULL WHERE id = ?';
         await db.query(updateUserQuery, [userId]);
 
-        res.status(200).json({ message: 'User successfully left the guild' });
+        reply.code(200).send({ message: 'User successfully left the guild' });
 
     } catch (error) {
         console.error('Error quitting guild:', error);
-        res.status(500).json({ error: 'Failed to quit the guild' });
+        reply.code(500).send({ error: 'Failed to quit the guild' });
     }
 });
 
 
-app.post('/handle-guild-request', async (req, res) => {
+fastify.post('/handle-guild-request', async (request, reply) => {
     try {
-        const { name, userId, username, action } = req.body; // Removed adminId from request body
+        const { name, userId, username, action } = request.body; // Removed adminId from request body
 
         if (!name || !userId || !action) {
-            return res.status(400).json({ error: 'Guild name, userId, and action are required' });
+            return reply.code(400).send({ error: 'Guild name, userId, and action are required' });
         }
 
         // Fetch guild data
@@ -3261,7 +3260,7 @@ app.post('/handle-guild-request', async (req, res) => {
         const [guildResult] = await db.query(guildQuery, [name]);
 
         if (guildResult.length === 0) {
-            return res.status(404).json({ error: 'Guild not found' });
+            return reply.code(404).send({ error: 'Guild not found' });
         }
 
         let { members, request_list } = guildResult[0];
@@ -3271,13 +3270,13 @@ app.post('/handle-guild-request', async (req, res) => {
         // Find admin userId from members list
         const admin = members.find(member => member.role === "admin");
         if (!admin) {
-            return res.status(403).json({ error: 'No admin found in the guild' });
+            return reply.code(403).send({ error: 'No admin found in the guild' });
         }
 
         // Find user in request_list (now an array of objects)
         const requestIndex = request_list.findIndex(request => request.userId === userId);
         if (requestIndex === -1) {
-            return res.status(400).json({ error: 'User did not request to join this guild' });
+            return reply.code(400).send({ error: 'User did not request to join this guild' });
         }
 
         if (action === "accept") {
@@ -3295,7 +3294,7 @@ app.post('/handle-guild-request', async (req, res) => {
             const updateQuery = 'UPDATE guilds SET members = ?, request_list = ? WHERE name = ?';
             await db.query(updateQuery, [JSON.stringify(members), JSON.stringify(request_list), name]);
 
-            return res.status(200).json({ message: 'User successfully joined the guild' });
+            return reply.code(200).send({ message: 'User successfully joined the guild' });
         } else if (action === "reject") {
             // Remove user from request list
             request_list.splice(requestIndex, 1);
@@ -3303,31 +3302,31 @@ app.post('/handle-guild-request', async (req, res) => {
             const updateQuery = 'UPDATE guilds SET request_list = ? WHERE name = ?';
             await db.query(updateQuery, [JSON.stringify(request_list), name]);
 
-            return res.status(200).json({ message: 'Join request rejected' });
+            return reply.code(200).send({ message: 'Join request rejected' });
         } else {
-            return res.status(400).json({ error: 'Invalid action. Use "accept" or "reject"' });
+            return reply.code(400).send({ error: 'Invalid action. Use "accept" or "reject"' });
         }
     } catch (error) {
         console.error('Error handling guild request:', error);
-        res.status(500).json({ error: 'Failed to process request' });
+        reply.code(500).send({ error: 'Failed to process request' });
     }
 });
 
-app.get('/guild-quests', async (req, res) => {
+fastify.get('/guild-quests', async (request, reply) => {
     try {
         const [result] = await db.query("SELECT * FROM guild_quests");
-        res.json(result);
+        reply.send(result);
     } catch (error) {
-        res.status(500).json({ error: "Failed to fetch craftable items" });
+        reply.code(500).send({ error: "Failed to fetch craftable items" });
     }
 })
 
-app.post('/select-guild-quest', async (req, res) => {
+fastify.post('/select-guild-quest', async (request, reply) => {
     try {
-      const { questId, userId, guildName } = req.body;
+      const { questId, userId, guildName } = request.body;
   
       if (!questId || !userId || !guildName) {
-        return res.status(400).json({ error: 'questId, userId, and guildName are required' });
+        return reply.code(400).send({ error: 'questId, userId, and guildName are required' });
       }
   
       // 1. Fetch guild data and check if the user is an admin
@@ -3335,7 +3334,7 @@ app.post('/select-guild-quest', async (req, res) => {
       const [guildResult] = await db.query(guildQuery, [guildName]);
   
       if (guildResult.length === 0) {
-        return res.status(404).json({ error: 'Guild not found' });
+        return reply.code(404).send({ error: 'Guild not found' });
       }
   
       let { members, group_quests, guild_gems } = guildResult[0];
@@ -3346,7 +3345,7 @@ app.post('/select-guild-quest', async (req, res) => {
       const admin = members.find(member => member.userId === userId && member.role === 'admin');
   
       if (!admin) {
-        return res.status(403).json({ error: 'User is not an admin in this guild' });
+        return reply.code(403).send({ error: 'User is not an admin in this guild' });
       }
   
       // 2. Check if the questId exists in the guild_quests table
@@ -3354,17 +3353,17 @@ app.post('/select-guild-quest', async (req, res) => {
       const [questCheckResult] = await db.query(questCheckQuery, [questId]);
   
       if (questCheckResult.length === 0) {
-        return res.status(404).json({ error: 'Quest not found' });
+        return reply.code(404).send({ error: 'Quest not found' });
       }
   
       // 3. Check if the guild has enough gems for the quest
       if (guild_gems < questCheckResult[0].price) {
-        return res.status(400).json({ error: 'Not enough guild gems for this quest' });
+        return reply.code(400).send({ error: 'Not enough guild gems for this quest' });
       }
   
       // 4. Ensure that the quest is not already selected
       if (group_quests.some(quest => quest.id === questId)) {
-        return res.status(400).json({ error: 'Quest is already selected for the guild' });
+        return reply.code(400).send({ error: 'Quest is already selected for the guild' });
       }
   
       // 5. Add the quest with the selected date to the group_quests
@@ -3378,29 +3377,29 @@ app.post('/select-guild-quest', async (req, res) => {
       const updateGuildQuery = 'UPDATE guilds SET group_quests = ?, guild_gems = ? WHERE name = ?';
       await db.query(updateGuildQuery, [JSON.stringify(group_quests), updatedGuildGems, guildName]);
   
-      return res.status(200).json({ message: 'Quest successfully added to the guild' });
+      return reply.code(200).send({ message: 'Quest successfully added to the guild' });
     } catch (error) {
       console.error('Error handling select-guild-quest request:', error);
-      return res.status(500).json({ error: 'Failed to process request' });
+      return reply.code(500).send({ error: 'Failed to process request' });
     }
 });
 
-app.post('/calculate-total-completions', async (req, res) => {
+fastify.post('/calculate-total-completions', async (request, reply) => {
     try {
-        const { groupQuestId, guildName } = req.body;
+        const { groupQuestId, guildName } = request.body;
         if (!groupQuestId || !guildName) {
-            return res.status(400).json({ error: 'groupQuestId and guildName are required' });
+            return reply.code(400).send({ error: 'groupQuestId and guildName are required' });
         }
     
         // 1. Fetch guild data: group_quests and members
         const guildQuery = 'SELECT group_quests, members FROM guilds WHERE name = ?';
         const [guildResult] = await db.query(guildQuery, [guildName]);
         if (guildResult.length === 0) {
-            return res.status(404).json({ error: 'Guild not found' });
+            return reply.code(404).send({ error: 'Guild not found' });
         }
         const groupQuests = JSON.parse(guildResult[0].group_quests || '[]');
         if (groupQuests.length === 0) {
-            return res.status(400).json({ error: 'No quests in the guild' });
+            return reply.code(400).send({ error: 'No quests in the guild' });
         }
         const members = JSON.parse(guildResult[0].members || '[]');
         const guildMemberIds = members.map(member => member.userId);
@@ -3408,18 +3407,18 @@ app.post('/calculate-total-completions', async (req, res) => {
         // 2. Find the specific group quest in the guild's group_quests array using groupQuestId
         const groupQuest = groupQuests.find(gq => gq.id === groupQuestId);
         if (!groupQuest) {
-            return res.status(404).json({ error: 'Group quest not found in guild records' });
+            return reply.code(404).send({ error: 'Group quest not found in guild records' });
         }
         const selectedAt = groupQuest.selectedDate;
         if (!selectedAt) {
-            return res.status(400).json({ error: 'Selected date missing for this group quest' });
+            return reply.code(400).send({ error: 'Selected date missing for this group quest' });
         }
     
         // 3. Fetch the completion criteria for this quest from the guild_quests table
         const guildQuestQuery = 'SELECT completion_criteria FROM guild_quests WHERE id = ?';
         const [guildQuestResult] = await db.query(guildQuestQuery, [groupQuestId]);
         if (guildQuestResult.length === 0) {
-            return res.status(404).json({ error: 'Completion criteria not found for this quest' });
+            return reply.code(404).send({ error: 'Completion criteria not found for this quest' });
         }
         let completionCriteria = guildQuestResult[0].completion_criteria;
         if (typeof completionCriteria === 'string') {
@@ -3427,7 +3426,7 @@ app.post('/calculate-total-completions', async (req, res) => {
         }
         const { stat: requiredStat, quantity: requiredQuantity } = completionCriteria;
         if (!requiredStat || !requiredQuantity) {
-            return res.status(400).json({ error: 'Invalid completion criteria' });
+            return reply.code(400).send({ error: 'Invalid completion criteria' });
         }
 
         const participantsQuery = `
@@ -3451,15 +3450,15 @@ app.post('/calculate-total-completions', async (req, res) => {
         console.log(completedCount);
         
         // 7. Return the total valid completions and progress percentage
-        return res.status(200).json({completedCount});
+        return reply.code(200).send({completedCount});
     } catch (error) {
       console.error('Error calculating total completions:', error);
-      return res.status(500).json({ error: 'Failed to calculate total completions' });
+      return reply.code(500).send({ error: 'Failed to calculate total completions' });
     }
 });
 
-app.post('/finish-guild-quest', async (req, res) => {
-    const { questId, userId, guildName } = req.body;
+fastify.post('/finish-guild-quest', async (request, reply) => {
+    const { questId, userId, guildName } = request.body;
 
     try {
         const completionDate = new Date().toISOString().split('T')[0];
@@ -3471,7 +3470,7 @@ app.post('/finish-guild-quest', async (req, res) => {
         );
 
         if (quest.length === 0) {
-            return res.status(404).json({ error: 'Quest not found.' });
+            return reply.code(404).send({ error: 'Quest not found.' });
         }
 
         const { experience_reward: experienceReward, item_reward: itemReward, stat_reward: statReward, currency_reward: currencyReward } = quest[0];
@@ -3518,7 +3517,7 @@ app.post('/finish-guild-quest', async (req, res) => {
         );
 
         if (guild.length === 0) {
-            return res.status(404).json({ error: 'Guild not found.' });
+            return reply.code(404).send({ error: 'Guild not found.' });
         }
 
         let groupQuests = JSON.parse(guild[0].group_quests || '{}');
@@ -3529,7 +3528,7 @@ app.post('/finish-guild-quest', async (req, res) => {
         const questToUpdate = groupQuests.find(q => q.id === questId);
 
         if (!questToUpdate) {
-            return res.status(404).json({ error: 'Quest not found in group quests.' });
+            return reply.code(404).send({ error: 'Quest not found in group quests.' });
         }
 
         // Ensure claimedMembers array exists
@@ -3564,7 +3563,7 @@ app.post('/finish-guild-quest', async (req, res) => {
             [JSON.stringify(groupQuests), guildGems, guildName]
         );
 
-        res.json({ 
+        reply.send({ 
             success: true, 
             message: allClaimed 
                 ? 'All members claimed the quest. Quest removed from group quests and currency added to guild gems.' 
@@ -3573,15 +3572,15 @@ app.post('/finish-guild-quest', async (req, res) => {
 
     } catch (err) {
         console.error('Error finishing quest:', err);
-        res.status(500).json({ error: 'Failed to mark quest as finished.' });
+        reply.code(500).send({ error: 'Failed to mark quest as finished.' });
     }
 });
 
-app.post('/guild-upgrade', async (req, res) => {
-    const { guildName, upgradeType, userId } = req.body;  // Include userId in request
+fastify.post('/guild-upgrade', async (request, reply) => {
+    const { guildName, upgradeType, userId } = request.body;  // Include userId in request
 
     if (!guildName || !upgradeType || !userId) {
-        return res.status(400).send({ message: "Missing required fields" });
+        return reply.code(400).send({ message: "Missing required fields" });
     }
 
     const cost = 25;
@@ -3595,7 +3594,7 @@ app.post('/guild-upgrade', async (req, res) => {
         `, [guildName]);
 
         if (guild.length === 0) {
-            return res.status(404).send({ message: "Guild not found" });
+            return reply.code(404).send({ message: "Guild not found" });
         }
 
         const { guild_gems, guild_upgrades, members } = guild[0];
@@ -3605,7 +3604,7 @@ app.post('/guild-upgrade', async (req, res) => {
         const user = membersArray.find(member => Number(member.userId) === Number(userId));
 
         if (!user || user.role !== "admin") {
-            return res.status(403).send({ message: "Only admins can upgrade the guild" });
+            return reply.code(403).send({ message: "Only admins can upgrade the guild" });
         }
 
         // ✅ Parse upgrades or initialize as empty array
@@ -3625,7 +3624,7 @@ app.post('/guild-upgrade', async (req, res) => {
 
         // ✅ Check if the guild has enough currency
         if (guild_gems < cost) {
-            return res.status(400).send({ message: "Not enough currency" });
+            return reply.code(400).send({ message: "Not enough currency" });
         }
 
         // ✅ Find existing upgrade
@@ -3634,7 +3633,7 @@ app.post('/guild-upgrade', async (req, res) => {
         if (existingUpgrade) {
             // Check if the upgrade is already at level 5
             if (existingUpgrade.level >= 5) {
-                return res.status(400).send({ message: "Upgrade is already at maximum level (5)" });
+                return reply.code(400).send({ message: "Upgrade is already at maximum level (5)" });
             }
             // Increment level if upgrade already exists and is not maxed out
             existingUpgrade.level += 1;
@@ -3654,7 +3653,7 @@ app.post('/guild-upgrade', async (req, res) => {
             WHERE name = ?
         `, [newCurrency, upgradesJSON, guildName]);
 
-        res.status(200).send({
+        reply.code(200).send({
             message: "Guild upgraded successfully",
             guildName,
             newCurrency,
@@ -3663,16 +3662,16 @@ app.post('/guild-upgrade', async (req, res) => {
 
     } catch (error) {
         console.error("Error upgrading guild:", error);
-        res.status(500).send({ message: "Internal server error" });
+        reply.code(500).send({ message: "Internal server error" });
     }
 });
 
-app.post('/donate-gold', async (req, res) => {
+fastify.post('/donate-gold', async (request, reply) => {
     try {
-        const { userId, guildName, amount } = req.body;
+        const { userId, guildName, amount } = request.body;
 
         if (!userId || !guildName || !amount || amount <= 0) {
-            return res.status(400).json({ error: 'User ID, guild name, and a valid donation amount are required' });
+            return reply.code(400).send({ error: 'User ID, guild name, and a valid donation amount are required' });
         }
 
         const conversionRate = 10000;
@@ -3682,7 +3681,7 @@ app.post('/donate-gold', async (req, res) => {
         const [userResult] = await db.query(userQuery, [userId]);
 
         if (userResult.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
+            return reply.code(404).send({ error: 'User not found' });
         }
 
         const { username, currency } = userResult[0];
@@ -3695,7 +3694,7 @@ app.post('/donate-gold', async (req, res) => {
         const [updateResult] = await db.query(updateUserCurrencyQuery, [amount, userId, amount]);
 
         if (updateResult.affectedRows === 0) {
-        return res.status(400).json({ error: 'Insufficient currency to donate' });
+        return reply.code(400).send({ error: 'Insufficient currency to donate' });
         }
 
 
@@ -3704,7 +3703,7 @@ app.post('/donate-gold', async (req, res) => {
         const [guildResult] = await db.query(guildQuery, [guildName]);
 
         if (guildResult.length === 0) {
-            return res.status(404).json({ error: 'Guild not found' });
+            return reply.code(404).send({ error: 'Guild not found' });
         }
 
         let goldCollected = [];
@@ -3740,7 +3739,7 @@ app.post('/donate-gold', async (req, res) => {
             WHERE name = ?`;
         await db.query(updateGuildQuery, [JSON.stringify(goldCollected), totalGems, unconvertedGold, guildName]);
 
-        res.status(200).json({
+        reply.code(200).send({
             message: `Donation successful. ${gemsToAdd} gem(s) added.`,
             guild_gems: totalGems,
             remaining_gold: unconvertedGold
@@ -3748,7 +3747,7 @@ app.post('/donate-gold', async (req, res) => {
 
     } catch (error) {
         console.error('Error donating gold:', error);
-        res.status(500).json({ error: 'Failed to donate gold' });
+        reply.code(500).send({ error: 'Failed to donate gold' });
     }
 });
 
@@ -3759,9 +3758,19 @@ app.post('/donate-gold', async (req, res) => {
 
 
 
+const start = async () => {
+    try {
+      await fastify.listen({ port: 3001 });
+      console.log('✅ Backend running on HTTP at port 3001');
+    } catch (err) {
+      fastify.log.error(err);
+      process.exit(1);
+    }
+};
   
+start();
 
 
-app.listen(3001, () => {
-    console.log('✅ Backend running on HTTP at port 3001');
-});
+// fastify.listen(3001, () => {
+//     console.log('✅ Backend running on HTTP at port 3001');
+// });
