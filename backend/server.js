@@ -555,7 +555,7 @@ app.get('/quests/active', async (req, res) => {
 
 // Fetch completed quests the user has participated in
 app.get('/quests/completed', async (req, res) => {
-    const { userId, date } = req.query;
+    const { userId } = req.query;
 
     // Validate if the user ID is provided
     if (!userId) {
@@ -568,6 +568,7 @@ app.get('/quests/completed', async (req, res) => {
         // Get the current date (formatted as 'YYYY-MM-DD')
        
         const currentDate = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+        console.log(currentDate);   
         // const currentDate = new Date().toLocaleDateString('en-CA');  // 'YYYY-MM-DD'
         // Query to fetch completed quests for the given user where completed = true and completed_at is today
         const [completedQuests] = await db.query(
@@ -577,6 +578,8 @@ app.get('/quests/completed', async (req, res) => {
              WHERE qp.user_id = ? AND qp.completed = 1 AND qp.completed_at = ?`,
             [userId, currentDate]  // Use the currentDate for filtering
         );
+
+        console.log(completedQuests);
         // Return the completed quests
         res.status(200).json(completedQuests);
     } catch (error) {
@@ -590,6 +593,8 @@ app.post('/quests/finish', async (req, res) => {
     const { questId, userId, date } = req.body;
 
     const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+
+    const currentDate = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
 
     try {
         const [userExists] = await db.query('SELECT id, guild FROM users WHERE id = ?', [userId]);
@@ -625,7 +630,7 @@ app.post('/quests/finish', async (req, res) => {
         // Check if the quest is already completed today
         const [existing] = await db.query(
             `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ? AND completed = 1 AND completed_at = ?`,
-            [questId, userId, now]
+            [questId, userId, currentDate]
         );
 
         if (existing.length > 0) {
@@ -657,7 +662,7 @@ app.post('/quests/finish', async (req, res) => {
             `UPDATE quest_participants
              SET completed = 1, completed_at = ?
              WHERE quest_id = ? AND user_id = ?`,
-            [now, questId, userId]
+            [currentDate, questId, userId]
         );
 
         let boostedExperienceReward = experienceReward + xpBoost;
