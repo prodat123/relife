@@ -605,7 +605,7 @@ fastify.get('/quests/completed', async (request, reply) => {
       );
   
       // Return the completed quests
-      return reply.code(200).send(completedQuests);
+      return reply.send(completedQuests);
     } catch (error) {
       console.error('Error fetching completed quests:', error);
       return reply.code(500).send({ error: 'An error occurred while fetching completed quests' });
@@ -925,21 +925,37 @@ fastify.get('/allMonsters', async (request, reply) => {
     }
 });
 
+
 fastify.get('/leaderboard', async (request, reply) => {
+    const { userId } = request.query; // Extract userId from query parameters
+    
+    if (!userId) {
+        return reply.code(400).send({ error: 'User ID is required' });
+    }
+
     try {
         const page = 1;
         const limit = 100;
         const offset = (page - 1) * limit;
 
-        const [ users ] = await db.query(`
+        // Query for the leaderboard data, ordered by experience
+        const [users] = await db.query(`
             SELECT id, username, experience 
             FROM users 
             ORDER BY experience DESC 
             LIMIT ? OFFSET ?
         `, [limit, offset]);
 
-        const [ total ] = await db.query('SELECT COUNT(*) as count FROM users');
+        // Query to get the total number of users in the database
+        const [total] = await db.query('SELECT COUNT(*) as count FROM users');
 
+        // Check if the userId exists in the users table
+        const [userCheck] = await db.query('SELECT id FROM users WHERE id = ?', [userId]);
+        if (userCheck.length === 0) {
+            return reply.code(404).send({ error: 'User not found' });
+        }
+
+        // Send the response with the leaderboard data
         return reply.send({
             users,
             currentPage: page,
@@ -951,6 +967,7 @@ fastify.get('/leaderboard', async (request, reply) => {
         reply.code(500).send({ message: 'Internal Server Error' });
     }
 });
+
 
 fastify.post('/update-equipment', async (request, reply) => {
     const { userId, slot, itemId, inventory } = request.body;
