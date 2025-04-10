@@ -14,6 +14,7 @@
   "dependencies": {
     "@fastify/cors": "^11.0.1",
     "@fastify/helmet": "^13.0.1",
+    "@fastify/rate-limit": "^10.2.2",
     "@google-cloud/recaptcha-enterprise": "^5.13.0",
     "axios": "^1.7.9",
     "bcrypt": "^5.1.1",

@@ -1,6 +1,7 @@
-const express = require('express');
+// const express = require('express');
 const fastify = require('fastify')({logger: true});
 // const session = require('express-session');
+const rateLimit = require('@fastify/rate-limit');
 const bodyParser = require('body-parser');
 const db = require('./db'); // Import the database connection
 // const cors = require('cors');
@@ -17,6 +18,22 @@ fastify.register(cors, {
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With'],
     credentials: true
+});
+
+
+fastify.register(rateLimit, {
+  max: 100, // Max number of requests
+  timeWindow: '1 minute', // Time window
+  // Optional extras:
+  allowList: ['127.0.0.1'], // IPs to allow unlimited access
+  ban: 2, // Optional: ban for X ms after X violations
+  errorResponseBuilder: function (req, context) {
+    return {
+      code: 429,
+      error: 'Too Many Requests',
+      message: `Rate limit exceeded: ${context.max} requests per ${context.after}`,
+    };
+  }
 });
 
 
@@ -547,15 +564,15 @@ fastify.get('/quests/active', async (request, reply) => {
     }
   
     try {
-      const [activeQuests] = await db.query(
-        `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, qp.expired_at, q.* 
-         FROM quest_participants qp
-         INNER JOIN quests q ON qp.quest_id = q.id
-         WHERE qp.user_id = ? AND qp.completed = 0`,
-        [userId]
-      );
+        const [activeQuests] = await db.query(
+            `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, qp.expired_at, q.* 
+            FROM quest_participants qp
+            INNER JOIN quests q ON qp.quest_id = q.id
+            WHERE qp.user_id = ? AND qp.completed = 0`,
+            [userId]
+        );
   
-      return reply.code(200).send(activeQuests);
+        reply.code(200).send(activeQuests);
     } catch (error) {
       console.error('Error fetching active quests:', error);
       return reply.code(500).send({ error: 'An error occurred while fetching active quests' });
@@ -911,7 +928,7 @@ fastify.get('/allMonsters', async (request, reply) => {
 fastify.get('/leaderboard', async (request, reply) => {
     try {
         const page = parseInt(request.query.page) || 1;
-        const limit = parseInt(request.query.limit) || 4000;
+        const limit = parseInt(request.query.limit) || 100;
         const offset = (page - 1) * limit;
 
         const [ users ] = await db.query(`
