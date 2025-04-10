@@ -392,7 +392,7 @@ cron.schedule('0 0 * * *', async () => {
 fastify.get('/quests', async (request, reply) => {
     try {
         const [quests] = await db.query('SELECT * FROM quests');
-        reply.send(quests);
+        return reply.send(quests);
     } catch (error) {
         console.error('Error fetching quests:', error);
         return reply.code(500).send({ message: 'Internal Server Error' });
@@ -557,7 +557,7 @@ fastify.post('/quests/remove', async (request, reply) => {
 
 // Fetch quests the user is participating in
 fastify.get('/quests/active', async (request, reply) => {
-    const { userId, date } = request.query;
+    const { userId } = request.query;
   
     if (!userId) {
       return reply.code(400).send({ error: 'User ID is required' });
@@ -572,7 +572,7 @@ fastify.get('/quests/active', async (request, reply) => {
             [userId]
         );
   
-        reply.code(200).send(activeQuests);
+        return reply.code(200).send(activeQuests);
     } catch (error) {
       console.error('Error fetching active quests:', error);
       return reply.code(500).send({ error: 'An error occurred while fetching active quests' });
@@ -927,8 +927,8 @@ fastify.get('/allMonsters', async (request, reply) => {
 
 fastify.get('/leaderboard', async (request, reply) => {
     try {
-        const page = parseInt(request.query.page) || 1;
-        const limit = parseInt(request.query.limit) || 100;
+        const page = 1;
+        const limit = 100;
         const offset = (page - 1) * limit;
 
         const [ users ] = await db.query(`
