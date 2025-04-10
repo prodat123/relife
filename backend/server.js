@@ -14,7 +14,7 @@ require('dotenv').config();
 
 fastify.register(require('@fastify/helmet'));
 fastify.register(cors, {
-    origin: ['https://relifehabits.com', '*'], // your frontend domain
+    origin: ['*'], // your frontend domain
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With'],
     credentials: true
@@ -940,7 +940,7 @@ fastify.get('/leaderboard', async (request, reply) => {
 
         const [ total ] = await db.query('SELECT COUNT(*) as count FROM users');
 
-        reply.send({
+        return reply.send({
             users,
             currentPage: page,
             totalPages: Math.ceil(total[0].count / limit),
