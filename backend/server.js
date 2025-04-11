@@ -672,15 +672,16 @@ fastify.post('/quests/finish', async (request, reply) => {
 
         // Retrieve the quest's rewards (experience, item, and stat rewards)
         const [quest] = await db.query(
-            `SELECT experience_reward, item_reward, stat_reward FROM quests WHERE id = ?`,
+            `SELECT experience_reward, item_reward, stat_reward, tags FROM quests WHERE id = ?`,
             [questId]
         );
         if (quest.length === 0) {
             return reply.code(404).send({ error: 'Quest not found.' });
         }
 
-        const { experience_reward: experienceReward, item_reward: itemReward, stat_reward: statReward } = quest[0];
+        const { experience_reward: experienceReward, item_reward: itemReward, stat_reward: statReward, tags: questTags } = quest[0];
 
+        const formattedTags = JSON.parse(questTags);
         // Mark quest as completed
         await db.query(
             `UPDATE quest_participants
@@ -707,11 +708,24 @@ fastify.post('/quests/finish', async (request, reply) => {
             
             // Fetch current user stats
             const [user] = await db.query(
-                `SELECT stats FROM users WHERE id = ?`,
+                `SELECT stats, questTags FROM users WHERE id = ?`,
                 [userId]
             );
             let userStats = JSON.parse(user[0].stats || '{}'); // Assuming stats are stored in JSON format
+            let playerTags = JSON.parse(user[0].questTags || '[]');
 
+            // Append new unique tags
+            for (let tag of formattedTags) {
+                if (!playerTags.includes(tag)) {
+                    playerTags.push(tag);
+                }
+            }
+            
+            // Enforce the 6-tag limit (keep the most recent ones)
+            if (playerTags.length > 10) {
+                playerTags = playerTags.slice(playerTags.length - 10);
+            }
+            
             // Apply stat rewards
             for (let stat in statUpdates) {
                 if (userStats[stat]) {
@@ -720,13 +734,13 @@ fastify.post('/quests/finish', async (request, reply) => {
                     userStats[stat] = statUpdates[stat];
                 }
             }
-
-            // Save updated stats back to the database
+            
+            // Save updated stats and tags back to the database
             await db.query(
                 `UPDATE users
-                 SET stats = ?
+                 SET stats = ?, questTags = ?
                  WHERE id = ?`,
-                [JSON.stringify(userStats), userId]
+                [JSON.stringify(userStats), JSON.stringify(playerTags), userId]
             );
         }
 
@@ -861,13 +875,14 @@ fastify.get('/account', async (request, reply) => {
         perkPoints: user.perkPoints,
         claimedMilestones: user.claimedMilestones,
         guild: user.guild,
+        questTags: user.questTags,
       });
   
     } catch (error) {
       console.error('Error fetching account data:', error.message);
       return reply.code(500).send({ error: 'Failed to fetch account data' });
     }
-  });
+});
   
 
 fastify.get('/monster', async (request, reply) => {
@@ -926,11 +941,42 @@ fastify.get('/allMonsters', async (request, reply) => {
 });
 
 
+// Store rate limits in memory
+const leaderboardRateLimit = {};
+
+// Call limit and time window (in milliseconds)
+const MAX_CALLS = 5;
+const WINDOW = 10 * 1000; // 1 hour
+
 fastify.get('/leaderboard', async (request, reply) => {
-    const { userId } = request.query; // Extract userId from query parameters
-    
+    const { userId } = request.query;
+
     if (!userId) {
         return reply.code(400).send({ error: 'User ID is required' });
+    }
+
+    // Initialize tracking
+    const now = Date.now();
+    if (!leaderboardRateLimit[userId]) {
+        leaderboardRateLimit[userId] = {
+            count: 1,
+            startTime: now
+        };
+    } else {
+        const userData = leaderboardRateLimit[userId];
+
+        // Reset if window passed
+        if (now - userData.startTime > WINDOW) {
+            userData.count = 1;
+            userData.startTime = now;
+        } else {
+            userData.count += 1;
+        }
+
+        // If user exceeded the limit
+        if (userData.count > MAX_CALLS) {
+            return reply.code(429).send({ error: 'Rate limit exceeded. Please try again later.' });
+        }
     }
 
     try {
@@ -938,7 +984,6 @@ fastify.get('/leaderboard', async (request, reply) => {
         const limit = 100;
         const offset = (page - 1) * limit;
 
-        // Query for the leaderboard data, ordered by experience
         const [users] = await db.query(`
             SELECT id, username, experience 
             FROM users 
@@ -946,16 +991,13 @@ fastify.get('/leaderboard', async (request, reply) => {
             LIMIT ? OFFSET ?
         `, [limit, offset]);
 
-        // Query to get the total number of users in the database
         const [total] = await db.query('SELECT COUNT(*) as count FROM users');
 
-        // Check if the userId exists in the users table
         const [userCheck] = await db.query('SELECT id FROM users WHERE id = ?', [userId]);
         if (userCheck.length === 0) {
             return reply.code(404).send({ error: 'User not found' });
         }
 
-        // Send the response with the leaderboard data
         return reply.send({
             users,
             currentPage: page,
@@ -967,6 +1009,7 @@ fastify.get('/leaderboard', async (request, reply) => {
         reply.code(500).send({ message: 'Internal Server Error' });
     }
 });
+
 
 
 fastify.post('/update-equipment', async (request, reply) => {
