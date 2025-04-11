@@ -955,28 +955,35 @@ fastify.get('/leaderboard', async (request, reply) => {
         return reply.code(400).send({ error: 'User ID is required' });
     }
 
-    // Initialize tracking
     const now = Date.now();
+
     if (!leaderboardRateLimit[userId]) {
         leaderboardRateLimit[userId] = {
             count: 1,
-            startTime: now
+            startTime: now,
+            blockedUntil: null
         };
+    }
+
+    const userData = leaderboardRateLimit[userId];
+
+    // If user is currently blocked
+    if (userData.blockedUntil && now < userData.blockedUntil) {
+        return reply.code(429).send({ error: 'Too many requests. Please wait a bit.' });
+    }
+
+    // Reset after window
+    if (now - userData.startTime > WINDOW) {
+        userData.count = 1;
+        userData.startTime = now;
+        userData.blockedUntil = null;
     } else {
-        const userData = leaderboardRateLimit[userId];
+        userData.count += 1;
+    }
 
-        // Reset if window passed
-        if (now - userData.startTime > WINDOW) {
-            userData.count = 1;
-            userData.startTime = now;
-        } else {
-            userData.count += 1;
-        }
-
-        // If user exceeded the limit
-        if (userData.count > MAX_CALLS) {
-            return reply.code(429).send({ error: 'Rate limit exceeded. Please try again later.' });
-        }
+    if (userData.count > MAX_CALLS) {
+        userData.blockedUntil = now + WINDOW; // Block until current window expires
+        return reply.code(429).send({ error: 'Rate limit exceeded. Please try again in 10 seconds.' });
     }
 
     try {
