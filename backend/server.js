@@ -39,7 +39,7 @@ fastify.register(require('@fastify/rate-limit'), {
 
 const questsRateLimit = {}; // Store request history per userId
 
-const MAX_QUEST_CALLS = 5;
+const MAX_QUEST_CALLS = 40;
 const QUEST_WINDOW = 10 * 1000; // 10 seconds
 
 // Middleware for rate limiting
