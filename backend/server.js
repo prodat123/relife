@@ -1033,6 +1033,7 @@ fastify.get('/account', async (request, reply) => {
         guild: user.guild,
         questTags: user.questTags,
         spiritHealth: user.spiritHealth,
+        maxSpiritHealth: user.maxSpiritHealth,
       });
   
     } catch (error) {
