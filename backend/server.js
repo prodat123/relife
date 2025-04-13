@@ -14,7 +14,7 @@ require('dotenv').config();
 
 fastify.register(require('@fastify/helmet'));
 fastify.register(cors, {
-    origin: ['*'], // your frontend domain
+    origin: ['https://relifehabits.com'], // your frontend domain
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With'],
     credentials: true
