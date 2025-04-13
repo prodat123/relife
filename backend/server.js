@@ -484,7 +484,15 @@ cron.schedule('0 0 * * *', async () => {
 // });
 
 // Get quests by type
-fastify.get('/quests', async (request, reply) => {
+fastify.get('/quests',
+    {
+        config: {
+          rateLimit: {
+            max: 10,
+            timeWindow: '10 seconds'
+          }
+        }
+    }, async (request, reply) => {
     try {
         const [quests] = await db.query('SELECT * FROM quests');
         return reply.send(quests);
