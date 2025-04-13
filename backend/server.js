@@ -14,7 +14,7 @@ require('dotenv').config();
 
 fastify.register(require('@fastify/helmet'));
 fastify.register(cors, {
-    origin: ['https://relifehabits.com'], // your frontend domain
+    origin: ['https://relifehabits.com', '*'], // your frontend domain
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Origin', 'X-Requested-With'],
     credentials: true
@@ -44,53 +44,47 @@ const QUEST_WINDOW = 10 * 1000; // 10 seconds
 
 // Middleware for rate limiting
 fastify.addHook('preHandler', async (request, reply) => {
-    if (request.method !== 'GET') return; // Only apply to GET requests
+    // Apply rate limiting only to GET requests
+    if (request.method !== 'GET') return;
 
-    // Skip rate limiting for certain routes like health checks or public pages
-    const excludedRoutes = ['/shop', '/seeds', '/shop/spells', '/guilds', '/guild', '/items'];  // List routes to exclude from rate limiting
-    if (excludedRoutes.includes(request.routerPath)) {
-        return; // Skip rate limiting for these routes
-    }
+    // Use the IP address for rate limiting
+    const ip = request.ip;  // `request.ip` will give you the user's IP address
 
-    const { userId } = request.query;
-
-    if (!userId) {
-        return reply.code(400).send({ error: 'User ID is required' });
-    }
-
+    // Initialize rate limiting data if not present
     const now = Date.now();
-
-    // Initialize rate limit data if not present
-    if (!questsRateLimit[userId]) {
-        questsRateLimit[userId] = {
+    if (!questsRateLimit[ip]) {
+        questsRateLimit[ip] = {
             count: 1,
             startTime: now,
             blockedUntil: null
         };
     }
 
-    const userData = questsRateLimit[userId];
+    const ipData = questsRateLimit[ip];
 
-    // If blocked, deny the request
-    if (userData.blockedUntil && now < userData.blockedUntil) {
+    // If the IP is blocked (rate limit exceeded), deny the request
+    if (ipData.blockedUntil && now < ipData.blockedUntil) {
         return reply.code(429).send({ error: 'Too many requests. Please wait a bit.' });
     }
 
-    // Reset if time window has passed
-    if (now - userData.startTime > QUEST_WINDOW) {
-        userData.count = 1;
-        userData.startTime = now;
-        userData.blockedUntil = null;
+    // Reset rate limit if the time window has passed
+    if (now - ipData.startTime > QUEST_WINDOW) {
+        ipData.count = 1;
+        ipData.startTime = now;
+        ipData.blockedUntil = null;
     } else {
-        userData.count += 1;
+        ipData.count += 1;
     }
 
-    // If max requests exceeded, block for remainder of window
-    if (userData.count > MAX_QUEST_CALLS) {
-        userData.blockedUntil = now + QUEST_WINDOW;
+    // If the max requests have been exceeded for this IP, block the IP for the remainder of the window
+    if (ipData.count > MAX_QUEST_CALLS) {
+        ipData.blockedUntil = now + QUEST_WINDOW;
         return reply.code(429).send({ error: 'Rate limit exceeded. Please try again in 10 seconds.' });
     }
 });
+
+
+
 
   
 
