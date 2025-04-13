@@ -1,5 +1,5 @@
 // const express = require('express');
-const fastify = require('fastify')({logger: true});
+const fastify = require('fastify')();
 // const session = require('express-session');
 const rateLimit = require('@fastify/rate-limit');
 const bodyParser = require('body-parser');
@@ -361,13 +361,35 @@ const checkAndUpdateVows = async () => {
     }
 };
 
+const calculateLevel = (experience) => { 
+    let level = 1;
+    let xpForNextLevel = 100;
+
+    while (experience >= xpForNextLevel) {
+        level++;
+        experience -= xpForNextLevel;
+        xpForNextLevel = 100 * Math.pow(1.05, (level - 1));
+    }
+
+    return { level, remainingXP: experience, xpForNextLevel };
+};
+
 const checkSpiritHealth = async () => {
     const today = new Date().toISOString().split('T')[0];
 
     try {
-        const [users] = await db.query('SELECT id, spiritHealth FROM users');
+        const [users] = await db.query('SELECT id, spiritHealth, maxSpiritHealth, experience FROM users');
 
         for (const user of users) {
+            // Calculate the level from experience
+            const { level } = calculateLevel(user.experience);
+                    
+            const maxSpiritHealth = 50 + level;
+            // user.spiritHealth = 50 + level; // Add the level to existing spiritHealth
+            
+            // Update the user's spiritHealth in the database
+            await db.query('UPDATE users SET spiritHealth = ? WHERE id = ?', [user.spiritHealth, user.id]);
+
             const [quests] = await db.query(
                 'SELECT * FROM quest_participants WHERE user_id = ? AND completed_at = ?',
                 [user.id, today]
@@ -377,14 +399,14 @@ const checkSpiritHealth = async () => {
 
             if (quests.length > 0) {
                 // Completed at least one quest
-                if (user.spiritHealth < 50) {
+                if (user.spiritHealth < user.maxSpiritHealth){
                     newSpirit += 3;
-                    await db.query('UPDATE users SET spiritHealth = ? WHERE id = ?', [newSpirit, user.id]);
+                    await db.query('UPDATE users SET spiritHealth = ?, maxSpiritHealth = ? WHERE id = ?', [newSpirit, maxSpiritHealth, user.id]);
                 }
             } else {
                 // No quests completed
                 newSpirit = Math.max(user.spiritHealth - 5, 0);
-                await db.query('UPDATE users SET spiritHealth = ? WHERE id = ?', [newSpirit, user.id]);
+                await db.query('UPDATE users SET spiritHealth = ?, maxSpiritHealth = ? WHERE id = ?', [newSpirit, maxSpiritHealth, user.id]);
             }
 
             // If spiritHealth is 0, reset everything
@@ -414,8 +436,7 @@ const checkSpiritHealth = async () => {
                         perkPoints = 0,
                         guild = NULL,
                         questTags = '[]'
-                    WHERE id = ?
-                `, [emptyStats, user.id]);
+                    WHERE id = ?`, [emptyStats, user.id]);
 
                 console.log(`💀 ${user.id}'s spirit reached 0. Stats and progress reset.`);
             }
@@ -460,11 +481,10 @@ fastify.post('/change-username', async (request, reply) => {
 
 
 cron.schedule('0 0 * * *', async () => { 
-    console.log(`[${new Date().toISOString()}] Running daily quest insertion...`);
     await checkSpiritHealth();
     await clearCompletedQuestParticipants();
-    await insertDailyQuests();
-    await checkAndUpdateVows();
+    // await insertDailyQuests();
+    // await checkAndUpdateVows();
 }, {
     scheduled: true,
     timezone: 'America/Los_Angeles' // California Timezone
@@ -646,7 +666,7 @@ fastify.post('/quests/select', async (request, reply) => {
 
         let expiredAt;
         if (isJourney) {
-            expiredAt = new Date(formattedDate.getTime() + 30 * 1000); // +24 hours
+            expiredAt = new Date(formattedDate.getTime() + 24 * 1000); // +24 hours
         } else {
             const expirationMinutes = (difficulty * 30) - questTimerBuff;
             expiredAt = new Date(formattedDate.getTime() + expirationMinutes * 60 * 1000);
@@ -834,7 +854,7 @@ fastify.post('/quests/finish', async (request, reply) => {
             } else {
                 // Increment and continue journey
                 const newPeriod = currentPeriod + 1;
-                const newExpiredAt = new Date(formattedDate.getTime() + 30 * 1000); // +24h
+                const newExpiredAt = new Date(formattedDate.getTime() + 24 * 1000); // +24h
 
                 await db.query(
                     `UPDATE quest_participants 
@@ -842,8 +862,6 @@ fastify.post('/quests/finish', async (request, reply) => {
                      WHERE id = ?`,
                     [newPeriod, now, formattedDate, newExpiredAt, 'Started', existingQuest.id]
                 );
-
-                return reply.code(200).send({ message: `Period ${newPeriod}/${period} started for journey.` });
             }
         } else {
             // Mark as completed for normal quests
@@ -853,6 +871,7 @@ fastify.post('/quests/finish', async (request, reply) => {
                  WHERE quest_id = ? AND user_id = ?`,
                 [currentDate, questId, userId]
             );
+
         }
 
         let boostedExperienceReward = experienceReward + xpBoost;
@@ -867,28 +886,51 @@ fastify.post('/quests/finish', async (request, reply) => {
             );
         }
 
+        let statRewardThisPeriod = {};
+
         // Update stats and tags
         if (statReward) {
-            const statUpdates = JSON.parse(statReward);
+            const parsedStatReward = JSON.parse(statReward);
             const [user] = await db.query(`SELECT stats, questTags FROM users WHERE id = ?`, [userId]);
-
+        
             let userStats = JSON.parse(user[0].stats || '{}');
             let playerTags = JSON.parse(user[0].questTags || '[]');
-
+        
             for (let tag of formattedTags) {
                 if (!playerTags.includes(tag)) {
                     playerTags.push(tag);
                 }
             }
-
+        
             if (playerTags.length > 10) {
                 playerTags = playerTags.slice(playerTags.length - 10);
             }
-
-            for (let stat in statUpdates) {
-                userStats[stat] = (userStats[stat] || 0) + statUpdates[stat];
+        
+            // If journey, divide and round up stat reward
+            const currentPeriod = existingQuest.period_completed;
+            console.log("Current period: " + currentPeriod);
+            console.log("Total period: " + period);
+            // console.log("current period:" + currentPeriod);
+            // console.log("total period:" + period);
+            if (questType === 'journey') {
+                if(currentPeriod + 1 >= period){
+                    statRewardThisPeriod = parsedStatReward;
+                }else{
+                    for (let stat in parsedStatReward) {
+                        statRewardThisPeriod[stat] = Math.ceil(parsedStatReward[stat] / period);
+                        console.log(statRewardThisPeriod[stat]);
+                    }
+                }
+                
+            } else {
+                statRewardThisPeriod = parsedStatReward;
             }
 
+        
+            for (let stat in statRewardThisPeriod) {
+                userStats[stat] = (userStats[stat] || 0) + statRewardThisPeriod[stat];
+            }
+        
             await db.query(
                 `UPDATE users
                  SET stats = ?, questTags = ?
@@ -896,10 +938,15 @@ fastify.post('/quests/finish', async (request, reply) => {
                 [JSON.stringify(userStats), JSON.stringify(playerTags), userId]
             );
         }
+        
 
         // (Optional) Item reward logic can be added here
 
-        reply.send({ success: true, message: 'Quest marked as finished and rewards applied.' });
+        reply.send({ 
+            success: true, 
+            message: 'Quest marked as finished and rewards applied.', 
+            statsIncreased: statRewardThisPeriod || {}
+        });
 
     } catch (err) {
         console.error('Error finishing quest:', err);
