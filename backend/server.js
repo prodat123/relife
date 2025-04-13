@@ -300,15 +300,20 @@ const insertDailyQuests = async () => {
 };
 
 const clearCompletedQuestParticipants = async () => {
-    const query = `DELETE FROM quest_participants WHERE completed = 0;`;
+    const query = `
+        DELETE qp FROM quest_participants qp
+        JOIN quests q ON qp.quest_id = q.id
+        WHERE qp.completed = 0 AND q.type = 'daily';
+    `;
 
     try {
         const [results] = await db.query(query);
-        console.log('Successfully cleared completed quest participants:', results);
+        console.log('🧹 Successfully cleared incomplete daily quest participants:', results);
     } catch (err) {
         console.error('SQL Error (clearCompletedQuestParticipants):', err.message);
     }
 };
+
 
 const checkAndUpdateVows = async () => {
     try {
