@@ -484,15 +484,51 @@ cron.schedule('0 0 * * *', async () => {
 // });
 
 // Get quests by type
-fastify.get('/quests',
-    {
-        config: {
-          rateLimit: {
-            max: 10,
-            timeWindow: '1 minute'
-          }
-        }
-    }, async (request, reply) => {
+const questsRateLimit = {}; // Store request history per userId
+
+const MAX_QUEST_CALLS = 5;
+const QUEST_WINDOW = 10 * 1000; // 10 seconds
+
+fastify.get('/quests', async (request, reply) => {
+    const { userId } = request.query;
+
+    if (!userId) {
+        return reply.code(400).send({ error: 'User ID is required' });
+    }
+
+    const now = Date.now();
+
+    // Initialize rate limit data if not present
+    if (!questsRateLimit[userId]) {
+        questsRateLimit[userId] = {
+            count: 1,
+            startTime: now,
+            blockedUntil: null
+        };
+    }
+
+    const userData = questsRateLimit[userId];
+
+    // If blocked, deny the request
+    if (userData.blockedUntil && now < userData.blockedUntil) {
+        return reply.code(429).send({ error: 'Too many requests. Please wait a bit.' });
+    }
+
+    // Reset if time window has passed
+    if (now - userData.startTime > QUEST_WINDOW) {
+        userData.count = 1;
+        userData.startTime = now;
+        userData.blockedUntil = null;
+    } else {
+        userData.count += 1;
+    }
+
+    // If max requests exceeded, block for remainder of window
+    if (userData.count > MAX_QUEST_CALLS) {
+        userData.blockedUntil = now + QUEST_WINDOW;
+        return reply.code(429).send({ error: 'Rate limit exceeded. Please try again in 10 seconds.' });
+    }
+
     try {
         const [quests] = await db.query('SELECT * FROM quests');
         return reply.send(quests);
@@ -501,6 +537,7 @@ fastify.get('/quests',
         return reply.code(500).send({ message: 'Internal Server Error' });
     }
 });
+
   
 
 fastify.get('/quest/:id', async (request, reply) => {
