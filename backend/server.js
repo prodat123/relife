@@ -489,7 +489,7 @@ fastify.get('/quests',
         config: {
           rateLimit: {
             max: 10,
-            timeWindow: '10 seconds'
+            timeWindow: '1 minute'
           }
         }
     }, async (request, reply) => {
