@@ -666,7 +666,7 @@ fastify.post('/quests/select', async (request, reply) => {
 
         let expiredAt;
         if (isJourney) {
-            expiredAt = new Date(formattedDate.getTime() + 24 * 1000); // +24 hours
+            expiredAt = new Date(formattedDate.getTime() + 24 * 60 * 60 * 1000); // +24 hours
         } else {
             const expirationMinutes = (difficulty * 30) - questTimerBuff;
             expiredAt = new Date(formattedDate.getTime() + expirationMinutes * 60 * 1000);
@@ -854,7 +854,7 @@ fastify.post('/quests/finish', async (request, reply) => {
             } else {
                 // Increment and continue journey
                 const newPeriod = currentPeriod + 1;
-                const newExpiredAt = new Date(formattedDate.getTime() + 24 * 1000); // +24h
+                const newExpiredAt = new Date(formattedDate.getTime() + 24 * 60 * 60 * 1000); // +24h
 
                 await db.query(
                     `UPDATE quest_participants 
