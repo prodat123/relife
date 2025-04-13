@@ -21,19 +21,22 @@ fastify.register(cors, {
 });
 
 
-fastify.register(rateLimit, {
-    max: 10, // Max number of requests
-    timeWindow: '1 second', // Time window
-    ban: 60000 , // Optional: ban for X ms after X violations
-    keyGenerator: (req) => req.ip, // default, but keep for clarity
+fastify.register(require('@fastify/rate-limit'), {
+    max: 20, // Lower this if you want aggressive protection
+    timeWindow: '10 seconds',
+    ban: 60000, // Ban for 60 seconds if limit exceeded
+    keyGenerator: function (req) {
+      return req.ip; // Limit per IP
+    },
     errorResponseBuilder: function (req, context) {
-        return {
+      return {
         code: 429,
         error: 'Too Many Requests',
         message: `Rate limit exceeded: ${context.max} requests per ${context.after}`,
-        };
+      };
     }
-});
+  });
+  
 
 
 // const corsOptions = {
