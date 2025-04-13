@@ -22,9 +22,10 @@ fastify.register(cors, {
 
 
 fastify.register(rateLimit, {
-    max: 60, // Max number of requests
-    timeWindow: '10 seconds', // Time window
+    max: 10, // Max number of requests
+    timeWindow: '1 second', // Time window
     ban: 60000 , // Optional: ban for X ms after X violations
+    keyGenerator: (req) => req.ip, // default, but keep for clarity
     errorResponseBuilder: function (req, context) {
         return {
         code: 429,
