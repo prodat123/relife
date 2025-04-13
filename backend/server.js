@@ -1,5 +1,5 @@
 // const express = require('express');
-const fastify = require('fastify')();
+const fastify = require('fastify')({logger: "true"});
 // const session = require('express-session');
 const rateLimit = require('@fastify/rate-limit');
 const bodyParser = require('body-parser');
