@@ -36,6 +36,55 @@ fastify.register(require('@fastify/rate-limit'), {
       };
     }
 });
+
+const questsRateLimit = {}; // Store request history per userId
+
+const MAX_QUEST_CALLS = 5;
+const QUEST_WINDOW = 10 * 1000; // 10 seconds
+
+// Middleware for rate limiting
+fastify.addHook('preHandler', async (request, reply) => {
+    if (request.method !== 'GET') return; // Only apply to GET requests
+
+    const { userId } = request.query;
+
+    if (!userId) {
+        return reply.code(400).send({ error: 'User ID is required' });
+    }
+
+    const now = Date.now();
+
+    // Initialize rate limit data if not present
+    if (!questsRateLimit[userId]) {
+        questsRateLimit[userId] = {
+            count: 1,
+            startTime: now,
+            blockedUntil: null
+        };
+    }
+
+    const userData = questsRateLimit[userId];
+
+    // If blocked, deny the request
+    if (userData.blockedUntil && now < userData.blockedUntil) {
+        return reply.code(429).send({ error: 'Too many requests. Please wait a bit.' });
+    }
+
+    // Reset if time window has passed
+    if (now - userData.startTime > QUEST_WINDOW) {
+        userData.count = 1;
+        userData.startTime = now;
+        userData.blockedUntil = null;
+    } else {
+        userData.count += 1;
+    }
+
+    // If max requests exceeded, block for remainder of window
+    if (userData.count > MAX_QUEST_CALLS) {
+        userData.blockedUntil = now + QUEST_WINDOW;
+        return reply.code(429).send({ error: 'Rate limit exceeded. Please try again in 10 seconds.' });
+    }
+});
   
 
 
@@ -513,49 +562,12 @@ cron.schedule('0 0 * * *', async () => {
 // });
 
 // Get quests by type
-const questsRateLimit = {}; // Store request history per userId
-
-const MAX_QUEST_CALLS = 5;
-const QUEST_WINDOW = 10 * 1000; // 10 seconds
 
 fastify.get('/quests', async (request, reply) => {
     const { userId } = request.query;
 
     if (!userId) {
         return reply.code(400).send({ error: 'User ID is required' });
-    }
-
-    const now = Date.now();
-
-    // Initialize rate limit data if not present
-    if (!questsRateLimit[userId]) {
-        questsRateLimit[userId] = {
-            count: 1,
-            startTime: now,
-            blockedUntil: null
-        };
-    }
-
-    const userData = questsRateLimit[userId];
-
-    // If blocked, deny the request
-    if (userData.blockedUntil && now < userData.blockedUntil) {
-        return reply.code(429).send({ error: 'Too many requests. Please wait a bit.' });
-    }
-
-    // Reset if time window has passed
-    if (now - userData.startTime > QUEST_WINDOW) {
-        userData.count = 1;
-        userData.startTime = now;
-        userData.blockedUntil = null;
-    } else {
-        userData.count += 1;
-    }
-
-    // If max requests exceeded, block for remainder of window
-    if (userData.count > MAX_QUEST_CALLS) {
-        userData.blockedUntil = now + QUEST_WINDOW;
-        return reply.code(429).send({ error: 'Rate limit exceeded. Please try again in 10 seconds.' });
     }
 
     try {
