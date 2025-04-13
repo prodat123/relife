@@ -22,18 +22,18 @@ fastify.register(cors, {
 
 
 fastify.register(rateLimit, {
-  max: 100, // Max number of requests
-  timeWindow: '1 minute', // Time window
-  // Optional extras:
-  allowList: ['127.0.0.1'], // IPs to allow unlimited access
-  ban: 2, // Optional: ban for X ms after X violations
-  errorResponseBuilder: function (req, context) {
-    return {
-      code: 429,
-      error: 'Too Many Requests',
-      message: `Rate limit exceeded: ${context.max} requests per ${context.after}`,
-    };
-  }
+    max: 10, // Max number of requests
+    timeWindow: '10 seconds', // Time window
+    // Optional extras:
+    allowList: ['127.0.0.1'], // IPs to allow unlimited access
+    ban: 60000 , // Optional: ban for X ms after X violations
+    errorResponseBuilder: function (req, context) {
+        return {
+        code: 429,
+        error: 'Too Many Requests',
+        message: `Rate limit exceeded: ${context.max} requests per ${context.after}`,
+        };
+    }
 });
 
 
@@ -363,10 +363,107 @@ const checkAndUpdateVows = async () => {
     }
 };
 
+const checkSpiritHealth = async () => {
+    const today = new Date().toISOString().split('T')[0];
+
+    try {
+        const [users] = await db.query('SELECT id, spiritHealth FROM users');
+
+        for (const user of users) {
+            const [quests] = await db.query(
+                'SELECT * FROM quest_participants WHERE user_id = ? AND completed_at = ?',
+                [user.id, today]
+            );
+
+            let newSpirit = user.spiritHealth;
+
+            if (quests.length > 0) {
+                // Completed at least one quest
+                if (user.spiritHealth < 50) {
+                    newSpirit += 3;
+                    await db.query('UPDATE users SET spiritHealth = ? WHERE id = ?', [newSpirit, user.id]);
+                }
+            } else {
+                // No quests completed
+                newSpirit = Math.max(user.spiritHealth - 5, 0);
+                await db.query('UPDATE users SET spiritHealth = ? WHERE id = ?', [newSpirit, user.id]);
+            }
+
+            // If spiritHealth is 0, reset everything
+            if (newSpirit === 0) {
+                const emptyStats = JSON.stringify({
+                    strength: 1,
+                    bravery: 1,
+                    intelligence: 1,
+                    endurance: 1
+                });
+
+                await db.query(`
+                    UPDATE users SET 
+                        experience = 0,
+                        stats = ?,
+                        head = '',
+                        torso = '',
+                        legs = '',
+                        feet = '',
+                        weapon = '',
+                        inventory = '[]',
+                        currency = 0,
+                        spells = '[]',
+                        ownedSpells = '[]',
+                        badges = '[]',
+                        perks = '[]',
+                        perkPoints = 0,
+                        guild = NULL,
+                        questTags = '[]'
+                    WHERE id = ?
+                `, [emptyStats, user.id]);
+
+                console.log(`💀 ${user.id}'s spirit reached 0. Stats and progress reset.`);
+            }
+        }
+
+        console.log('🌅 Spirit health update completed.');
+    } catch (err) {
+        console.error('Error running daily spirit check:', err);
+    }
+};
+
+// Node.js Express
+fastify.post('/change-username', async (request, reply) => {
+    const { userId, newUsername } = request.body;
+
+    try {
+        // Step 1: Get current spiritHealth
+        const [rows] = await db.query('SELECT spiritHealth FROM users WHERE id = ?', [userId]);
+
+        if (!rows || rows.length === 0) {
+            return reply.code(404).send('User not found');
+        }
+
+        const spiritHealth = rows[0].spiritHealth;
+
+        // Step 2: Check if spiritHealth is 0
+        if (spiritHealth !== 0) {
+            return reply.code(403).send('Username can only be changed when spiritHealth is 0');
+        }
+
+        // Step 3: Proceed to change username
+        await db.query('UPDATE users SET username = ?, spiritHealth = 50 WHERE id = ?', [newUsername, userId]);
+        return reply.code(200).send('Username updated');
+    } catch (error) {
+        console.error(error);
+        return reply.code(500).send('Error updating username');
+    }
+});
+
+
+
 
 
 cron.schedule('0 0 * * *', async () => { 
     console.log(`[${new Date().toISOString()}] Running daily quest insertion...`);
+    await checkSpiritHealth();
     await clearCompletedQuestParticipants();
     await insertDailyQuests();
     await checkAndUpdateVows();
@@ -477,7 +574,7 @@ fastify.post('/quests/select', async (request, reply) => {
             }
 
             const [quest] = await db.query(
-                'SELECT difficulty FROM quests WHERE id = ?',
+                'SELECT difficulty, type FROM quests WHERE id = ?',
                 [questId]
             );
             const difficulty = quest[0]?.difficulty || 1;
@@ -494,32 +591,52 @@ fastify.post('/quests/select', async (request, reply) => {
             return reply.code(200).send({ message: 'Quest progress updated to Started' });
         }
 
-        // Start a new quest
+        // Start a new quest (now includes `type` for checking if it's a "journey")
         const [quest] = await db.query(
-            'SELECT difficulty FROM quests WHERE id = ?',
+            'SELECT difficulty, type FROM quests WHERE id = ?',
             [questId]
         );
+
         const difficulty = quest[0]?.difficulty || 1;
-        const expirationMinutes = (difficulty * 30) - questTimerBuff;
-        const expiredAt = new Date(formattedDate.getTime() + expirationMinutes * 60 * 1000);
+        const questType = quest[0]?.type || '';
+        const isJourney = questType === 'journey';
+
+        let expiredAt;
+        if (isJourney) {
+            expiredAt = new Date(formattedDate.getTime() + 30 * 1000); // +24 hours
+        } else {
+            const expirationMinutes = (difficulty * 30) - questTimerBuff;
+            expiredAt = new Date(formattedDate.getTime() + expirationMinutes * 60 * 1000);
+        }
 
         console.log("Joined at:", formattedDate);
         console.log("Expires at:", expiredAt);
 
         await db.query(
             `INSERT INTO quest_participants 
-             (quest_id, user_id, progress, completed, joined_at, expired_at, completed_at, joined_at_datetime) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [questId, userId, 'Started', false, datetime, expiredAt, null, formattedDate]
+             (quest_id, user_id, progress, completed, joined_at, expired_at, completed_at, joined_at_datetime, period_completed) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                questId,
+                userId,
+                'Started',
+                false,
+                datetime,
+                expiredAt,
+                null,
+                formattedDate,
+                isJourney ? 0 : null
+            ]
         );
 
-        return reply.code(201).send({ message: `Quest started, expires in ${expirationMinutes} minutes.` });
+        return reply.code(201).send({ message: `Quest started${isJourney ? ', expires in 24 hours' : ''}.` });
 
     } catch (err) {
         console.error('Error selecting quest:', err);
         return reply.code(500).send({ error: 'An error occurred while selecting the quest.' });
     }
 });
+
 
 
 fastify.post('/quests/remove', async (request, reply) => {
@@ -565,7 +682,7 @@ fastify.get('/quests/active', async (request, reply) => {
   
     try {
         const [activeQuests] = await db.query(
-            `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, qp.expired_at, q.* 
+            `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, qp.expired_at, qp.period_completed, q.* 
             FROM quest_participants qp
             INNER JOIN quests q ON qp.quest_id = q.id
             WHERE qp.user_id = ? AND qp.completed = 0`,
@@ -614,11 +731,11 @@ fastify.get('/quests/completed', async (request, reply) => {
   
 
 fastify.post('/quests/finish', async (request, reply) => {
-    const { questId, userId, date } = request.body;
+    const { questId, userId } = request.body;
 
     const now = new Date().toISOString().slice(0, 19).replace("T", " ");
-
     const currentDate = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+    const formattedDate = new Date();
 
     try {
         const [userExists] = await db.query('SELECT id, guild FROM users WHERE id = ?', [userId]);
@@ -626,73 +743,78 @@ fastify.post('/quests/finish', async (request, reply) => {
             return reply.code(400).send({ error: 'User does not exist' });
         }
 
-        
-
         const guildName = userExists[0].guild;
 
         let xpBoost = 0;
         if (guildName) {
-            const [guild] = await db.query(`
-                SELECT guild_upgrades 
-                FROM guilds 
-                WHERE name = ?
-            `, [guildName]);
-    
-            if (guild.length === 0) {
-                return reply.code(404).send({ error: 'Guild not found' });
-            }
-    
-            const guildUpgrades = JSON.parse(guild[0].guild_upgrades);
-
-            if (guildUpgrades.length > 0) {
+            const [guild] = await db.query(`SELECT guild_upgrades FROM guilds WHERE name = ?`, [guildName]);
+            if (guild.length > 0) {
+                const guildUpgrades = JSON.parse(guild[0].guild_upgrades);
                 const xpBoostUpgrade = guildUpgrades.find(u => u.type === 'xpBoost');
                 xpBoost = xpBoostUpgrade ? xpBoostUpgrade.level * 8 : 0;
             }
-            
         }
 
-        // Check if the quest is already completed today
-        const [existing] = await db.query(
-            `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ? AND completed = 1 AND completed_at = ?`,
-            [questId, userId, currentDate]
-        );
-
-        if (existing.length > 0) {
-            return reply.code(400).send({ error: 'Quest already completed today.' });
-        }
-
-        const [claimable] = await db.query(
-            `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ? AND expired_at < ?`,
-            [questId, userId, now]
-        );
-
-        if(claimable.length === 0){
-            return reply.code(400).send({ error: 'Quest is not ready to be claimed' });
-        }
-
-        // Retrieve the quest's rewards (experience, item, and stat rewards)
         const [quest] = await db.query(
-            `SELECT experience_reward, item_reward, stat_reward, tags FROM quests WHERE id = ?`,
+            `SELECT experience_reward, item_reward, stat_reward, tags, type, period FROM quests WHERE id = ?`,
             [questId]
         );
         if (quest.length === 0) {
             return reply.code(404).send({ error: 'Quest not found.' });
         }
 
-        const { experience_reward: experienceReward, item_reward: itemReward, stat_reward: statReward, tags: questTags } = quest[0];
-
+        const { experience_reward: experienceReward, item_reward: itemReward, stat_reward: statReward, tags: questTags, type: questType, period } = quest[0];
         const formattedTags = JSON.parse(questTags);
-        // Mark quest as completed
-        await db.query(
-            `UPDATE quest_participants
-             SET completed = 1, completed_at = ?
-             WHERE quest_id = ? AND user_id = ?`,
-            [currentDate, questId, userId]
+
+        const [claimable] = await db.query(
+            `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ? AND expired_at < ?`,
+            [questId, userId, now]
         );
+
+        if (claimable.length === 0) {
+            return reply.code(400).send({ error: 'Quest is not ready to be claimed' });
+        }
+
+        const existingQuest = claimable[0];
+
+        if (questType === 'journey') {
+            const currentPeriod = existingQuest.period_completed || 0;
+
+            if (currentPeriod + 1 >= period) {
+                // Final step, mark as completed
+                await db.query(
+                    `UPDATE quest_participants 
+                     SET completed = 1, completed_at = ?, progress = ? 
+                     WHERE id = ?`,
+                    [currentDate, 'Completed', existingQuest.id]
+                );
+            } else {
+                // Increment and continue journey
+                const newPeriod = currentPeriod + 1;
+                const newExpiredAt = new Date(formattedDate.getTime() + 30 * 1000); // +24h
+
+                await db.query(
+                    `UPDATE quest_participants 
+                     SET period_completed = ?, joined_at = ?, joined_at_datetime = ?, expired_at = ?, progress = ? 
+                     WHERE id = ?`,
+                    [newPeriod, now, formattedDate, newExpiredAt, 'Started', existingQuest.id]
+                );
+
+                return reply.code(200).send({ message: `Period ${newPeriod}/${period} started for journey.` });
+            }
+        } else {
+            // Mark as completed for normal quests
+            await db.query(
+                `UPDATE quest_participants
+                 SET completed = 1, completed_at = ?
+                 WHERE quest_id = ? AND user_id = ?`,
+                [currentDate, questId, userId]
+            );
+        }
 
         let boostedExperienceReward = experienceReward + xpBoost;
 
-        // Update user's experience points
+        // Add XP
         if (boostedExperienceReward) {
             await db.query(
                 `UPDATE users
@@ -702,40 +824,28 @@ fastify.post('/quests/finish', async (request, reply) => {
             );
         }
 
-        // Update user's stats if statReward exists
+        // Update stats and tags
         if (statReward) {
-            const statUpdates = JSON.parse(statReward); // Assuming stat_reward is stored as JSON string
-            
-            // Fetch current user stats
-            const [user] = await db.query(
-                `SELECT stats, questTags FROM users WHERE id = ?`,
-                [userId]
-            );
-            let userStats = JSON.parse(user[0].stats || '{}'); // Assuming stats are stored in JSON format
+            const statUpdates = JSON.parse(statReward);
+            const [user] = await db.query(`SELECT stats, questTags FROM users WHERE id = ?`, [userId]);
+
+            let userStats = JSON.parse(user[0].stats || '{}');
             let playerTags = JSON.parse(user[0].questTags || '[]');
 
-            // Append new unique tags
             for (let tag of formattedTags) {
                 if (!playerTags.includes(tag)) {
                     playerTags.push(tag);
                 }
             }
-            
-            // Enforce the 6-tag limit (keep the most recent ones)
+
             if (playerTags.length > 10) {
                 playerTags = playerTags.slice(playerTags.length - 10);
             }
-            
-            // Apply stat rewards
+
             for (let stat in statUpdates) {
-                if (userStats[stat]) {
-                    userStats[stat] += statUpdates[stat];
-                } else {
-                    userStats[stat] = statUpdates[stat];
-                }
+                userStats[stat] = (userStats[stat] || 0) + statUpdates[stat];
             }
-            
-            // Save updated stats and tags back to the database
+
             await db.query(
                 `UPDATE users
                  SET stats = ?, questTags = ?
@@ -744,61 +854,17 @@ fastify.post('/quests/finish', async (request, reply) => {
             );
         }
 
-        // Update user's inventory if an item reward exists
-        // Update user's inventory if an item reward exists (30% chance)
-        // if (itemReward) { // 30% chance
-        //     // Fetch current inventory
-        //     const [user] = await db.query(
-        //         `SELECT inventory FROM users WHERE id = ?`,
-        //         [userId]
-        //     );
-        //     let inventory = [];
-
-        //     try {
-        //         inventory = JSON.parse(user[0].inventory) || []; // Parse inventory safely
-        //     } catch (error) {
-        //         console.error("Error parsing inventory JSON:", error);
-        //         inventory = []; // Default to empty array if parsing fails
-        //     }
-
-        //     // Fetch the item details from the `items` table
-        //     const [itemDetails] = await db.query(
-        //         `SELECT id, name FROM items WHERE id = ?`,
-        //         [itemReward]
-        //     );
-        //     if (itemDetails.length === 0) {
-        //         return reply.code(404).send({ error: 'Reward item not found.' });
-        //     }
-
-        //     const item = itemDetails[0];
-
-        //     // Check if the item already exists in the inventory
-        //     let inventoryItem = inventory.find(invItem => invItem.id === item.id);
-
-        //     if (inventoryItem) {
-        //         inventoryItem.quantity = (inventoryItem.quantity || 0) + 1; // Ensure quantity exists before incrementing
-        //     } else {
-        //         inventory.push({ id: item.id, name: item.name, quantity: 1 }); // Add new item with quantity 1
-        //     }
-
-        //     // Save the updated inventory
-        //     await db.query(
-        //         `UPDATE users
-        //         SET inventory = ?
-        //         WHERE id = ?`,
-        //         [JSON.stringify(inventory), userId]
-        //     );
-
-        //     console.log("Updated Inventory:", inventory); // Debugging: Check what is being saved
-        // }
-
+        // (Optional) Item reward logic can be added here
 
         reply.send({ success: true, message: 'Quest marked as finished and rewards applied.' });
+
     } catch (err) {
         console.error('Error finishing quest:', err);
         reply.code(500).send({ error: 'Failed to mark quest as finished.' });
     }
 });
+
+
 
 // fastify.get('/quests/daily', async (request, reply) => {
 //     try {
@@ -876,6 +942,7 @@ fastify.get('/account', async (request, reply) => {
         claimedMilestones: user.claimedMilestones,
         guild: user.guild,
         questTags: user.questTags,
+        spiritHealth: user.spiritHealth,
       });
   
     } catch (error) {
