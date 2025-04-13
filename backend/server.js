@@ -22,7 +22,7 @@ fastify.register(cors, {
 
 
 fastify.register(require('@fastify/rate-limit'), {
-    max: 20, // Lower this if you want aggressive protection
+    max: 40, // Lower this if you want aggressive protection
     timeWindow: '10 seconds',
     ban: 60000, // Ban for 60 seconds if limit exceeded
     keyGenerator: function (req) {
@@ -35,7 +35,7 @@ fastify.register(require('@fastify/rate-limit'), {
         message: `Rate limit exceeded: ${context.max} requests per ${context.after}`,
       };
     }
-  });
+});
   
 
 
