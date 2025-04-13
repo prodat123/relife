@@ -46,6 +46,12 @@ const QUEST_WINDOW = 10 * 1000; // 10 seconds
 fastify.addHook('preHandler', async (request, reply) => {
     if (request.method !== 'GET') return; // Only apply to GET requests
 
+    // Skip rate limiting for certain routes like health checks or public pages
+    const excludedRoutes = ['/shop', '/seeds', '/shop/spells', '/guilds', '/guild', '/items'];  // List routes to exclude from rate limiting
+    if (excludedRoutes.includes(request.routerPath)) {
+        return; // Skip rate limiting for these routes
+    }
+
     const { userId } = request.query;
 
     if (!userId) {
@@ -85,43 +91,8 @@ fastify.addHook('preHandler', async (request, reply) => {
         return reply.code(429).send({ error: 'Rate limit exceeded. Please try again in 10 seconds.' });
     }
 });
+
   
-
-
-// const corsOptions = {
-//     origin: 'https://relifehabits.com',   // Your frontend URL
-//     methods: ['GET', 'POST', 'PUT', 'DELETE'],
-//     allowedHeaders: ['Content-Type', 'Authorization'],
-//     credentials: true,  // Allow cookies/sessions
-// };
-
-// fastify.use(bodyParser.send());
-
-// fastify.use(cors());
-
-// fastify.use(session({
-//     secret: process.env.SECRET_KEY,
-//     resave: false,
-//     saveUninitialized: false,
-//     cookie: {
-//         secure: true,
-//         httpOnly: true,
-//         maxAge: 8 * 60 * 60 * 1000  // 8 hours
-//     }
-// }));
-
-// fastify.use(bodyParser.urlencoded({ extended: true }));
-
-// fastify.use(session({
-//     secret: process.env.SECRET_KEY,
-//     resave: false,
-//     saveUninitialized: false,
-//     cookie: {
-//         secure: true,            // Set to true for HTTPS
-//         httpOnly: true,
-//         maxAge: 8 * 60 * 60 * 1000  // 8 hours
-//     }
-// }));
 
 fastify.post('/auth/signup', async (request, reply) => {
     const { username, password, email, age, recaptchaToken } = request.body;
@@ -3251,9 +3222,9 @@ fastify.post("/remove-perk", async (request, reply) => {
 fastify.get("/guilds", async (request, reply) => {
     try {
         const [result] = await db.query("SELECT * FROM guilds");
-        reply.send(result);
+        return reply.send(result);
     } catch (error) {
-        reply.code(500).send({ error: "Failed to fetch craftable items" });
+        return reply.code(500).send({ error: "Failed to fetch guilds" });
     }
 });
 
