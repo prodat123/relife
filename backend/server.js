@@ -24,8 +24,6 @@ fastify.register(cors, {
 fastify.register(rateLimit, {
     max: 10, // Max number of requests
     timeWindow: '10 seconds', // Time window
-    // Optional extras:
-    allowList: ['127.0.0.1'], // IPs to allow unlimited access
     ban: 60000 , // Optional: ban for X ms after X violations
     errorResponseBuilder: function (req, context) {
         return {
