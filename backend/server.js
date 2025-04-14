@@ -39,7 +39,7 @@ fastify.register(require('@fastify/rate-limit'), {
 
 const questsRateLimit = {}; // Store request history per userId
 
-const MAX_QUEST_CALLS = 40;
+const MAX_QUEST_CALLS = 100;
 const QUEST_WINDOW = 10 * 1000; // 10 seconds
 
 // Middleware for rate limiting
@@ -1324,46 +1324,13 @@ fastify.get('/allMonsters', async (request, reply) => {
 // Store rate limits in memory
 const leaderboardRateLimit = {};
 
-// Call limit and time window (in milliseconds)
-const MAX_CALLS = 5;
-const WINDOW = 10 * 1000; // 1 hour
+
 
 fastify.get('/leaderboard', async (request, reply) => {
     const { userId } = request.query;
 
     if (!userId) {
         return reply.code(400).send({ error: 'User ID is required' });
-    }
-
-    const now = Date.now();
-
-    if (!leaderboardRateLimit[userId]) {
-        leaderboardRateLimit[userId] = {
-            count: 1,
-            startTime: now,
-            blockedUntil: null
-        };
-    }
-
-    const userData = leaderboardRateLimit[userId];
-
-    // If user is currently blocked
-    if (userData.blockedUntil && now < userData.blockedUntil) {
-        return reply.code(429).send({ error: 'Too many requests. Please wait a bit.' });
-    }
-
-    // Reset after window
-    if (now - userData.startTime > WINDOW) {
-        userData.count = 1;
-        userData.startTime = now;
-        userData.blockedUntil = null;
-    } else {
-        userData.count += 1;
-    }
-
-    if (userData.count > MAX_CALLS) {
-        userData.blockedUntil = now + WINDOW; // Block until current window expires
-        return reply.code(429).send({ error: 'Rate limit exceeded. Please try again in 10 seconds.' });
     }
 
     try {
