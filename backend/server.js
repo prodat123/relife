@@ -501,9 +501,81 @@ fastify.post('/change-username', async (request, reply) => {
     }
 });
 
-
-
-
+async function autoSelectQuest(questId, userId) {
+    const formattedDate = new Date();
+    const datetime = formattedDate.toISOString().slice(0, 19).replace('T', ' ');
+  
+    const [userExists] = await db.query('SELECT id, guild FROM users WHERE id = ?', [userId]);
+    if (userExists.length === 0) return;
+  
+    const guildName = userExists[0].guild;
+    let extraSlots = 0;
+    let questTimerBuff = 0;
+  
+    if (guildName) {
+        const [guild] = await db.query('SELECT guild_upgrades FROM guilds WHERE name = ?', [guildName]);
+        if (guild.length > 0) {
+            const guildUpgrades = JSON.parse(guild[0].guild_upgrades || '[]');
+            extraSlots = (guildUpgrades.find(u => u.type === 'extraSlots')?.level || 0) * 2;
+            questTimerBuff = (guildUpgrades.find(u => u.type === 'questTimerBuff')?.level || 0) * 5;
+        }
+    }
+  
+    const [activeQuests] = await db.query(
+        'SELECT id FROM quest_participants WHERE user_id = ? AND completed = 0',
+        [userId]
+    );
+  
+    if (activeQuests.length >= 4 + extraSlots) return;
+  
+    const [existing] = await db.query(
+        'SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ?',
+        [questId, userId]
+    );
+  
+    const [quest] = await db.query(
+        'SELECT difficulty, type FROM quests WHERE id = ?',
+        [questId]
+    );
+  
+    if (!quest || quest.length === 0) return;
+  
+    const difficulty = quest[0].difficulty || 1;
+    const type = quest[0].type || '';
+    const isJourney = type === 'journey';
+  
+    const expiredAt = isJourney
+        ? new Date(formattedDate.getTime() + 24 * 60 * 60 * 1000)
+        : new Date(formattedDate.getTime() + ((difficulty * 30 - questTimerBuff) * 60 * 1000));
+  
+    if (existing.length > 0) {
+        if (existing[0].progress !== 'Started') {
+            await db.query(
+            `UPDATE quest_participants SET progress = ?, joined_at = ?, joined_at_datetime = ?, expired_at = ?, completed = ?
+            WHERE id = ?`,
+            ['Started', datetime, formattedDate, expiredAt, false, existing[0].id]
+            );
+        }
+        return;
+    }
+  
+    await db.query(
+        `INSERT INTO quest_participants 
+        (quest_id, user_id, progress, completed, joined_at, expired_at, completed_at, joined_at_datetime, period_completed) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            questId,
+            userId,
+            'Started',
+            false,
+            datetime,
+            expiredAt,
+            null,
+            formattedDate,
+            isJourney ? 0 : null
+        ]
+    );
+}
 
 cron.schedule('0 0 * * *', async () => { 
     await checkSpiritHealth();
@@ -512,21 +584,32 @@ cron.schedule('0 0 * * *', async () => {
     // await checkAndUpdateVows();
 }, {
     scheduled: true,
-    timezone: 'America/Los_Angeles' // California Timezone
+    timezone: "UTC"
 });
 
-// cron.schedule('0 */6 * * *', async () => {
-//     try {
-//         console.log('Resetting discounts and spin timestamps...');
-//         await db.query(
-//             `UPDATE users
-//              SET discount = NULL`
-//         );
-//         console.log('Discounts and timestamps reset successfully.');
-//     } catch (err) {
-//         console.error('Error resetting discounts:', err.message, err.stack);
-//     }
-// });
+cron.schedule('5 0 * * *', async () => {
+    const currentDay = new Date().toLocaleString('en-US', { weekday: 'long' }); // "Monday", etc.
+
+    try {
+      const [scheduled] = await db.query('SELECT * FROM scheduled_quests');
+
+      for (const row of scheduled) {
+        const daysArray = JSON.parse(row.days || '[]');
+
+        if (daysArray.includes(currentDay)) {
+          // Use internal DB logic instead of hitting your own API
+          await autoSelectQuest(row.quest_id, row.user_id);
+          console.log(`✅ Auto-started quest ${row.quest_id} for user ${row.user_id} on ${currentDay}`);
+        }
+      }
+    } catch (err) {
+      console.error('❌ Error running daily cron:', err);
+    }
+}, { 
+    scheduled: true,
+    timezone: "UTC"
+});
+
 
 // Get quests by type
 
@@ -688,8 +771,6 @@ fastify.post('/quests/select', async (request, reply) => {
     }
 });
 
-
-
 fastify.post('/quests/remove', async (request, reply) => {
     const { questId, userId } = request.body;
 
@@ -721,8 +802,6 @@ fastify.post('/quests/remove', async (request, reply) => {
     }
 });
 
-
-
 // Fetch quests the user is participating in
 fastify.get('/quests/active', async (request, reply) => {
     const { userId } = request.query;
@@ -746,8 +825,6 @@ fastify.get('/quests/active', async (request, reply) => {
       return reply.code(500).send({ error: 'An error occurred while fetching active quests' });
     }
 });
-  
-
 
 // Fetch completed quests the user has participated in
 fastify.get('/quests/completed', async (request, reply) => {
@@ -779,7 +856,6 @@ fastify.get('/quests/completed', async (request, reply) => {
       return reply.code(500).send({ error: 'An error occurred while fetching completed quests' });
     }
 });
-  
 
 fastify.post('/quests/finish', async (request, reply) => {
     const { questId, userId } = request.body;
@@ -941,8 +1017,166 @@ fastify.post('/quests/finish', async (request, reply) => {
         reply.code(500).send({ error: 'Failed to mark quest as finished.' });
     }
 });
+fastify.post('/schedule-quest', async (request, reply) => {
+    console.log("Incoming body:", request.body);
+  
+    const { quest_id, user_id, days } = request.body;
+  
+    if (!quest_id || !user_id || !Array.isArray(days)) {
+        return reply.code(400).send({ error: 'Missing quest_id, user_id, or days' });
+    }
+  
+    try {
+        const [existing] = await db.query(
+            `SELECT * FROM scheduled_quests WHERE quest_id = ? AND user_id = ?`,
+            [quest_id, user_id]
+        );
+    
+        // 🌟 Step 1: Fetch all scheduled quests for this user
+        const [allScheduled] = await db.query(
+            `SELECT days FROM scheduled_quests WHERE user_id = ?`,
+            [user_id]
+        );
+    
+        // 🌟 Step 2: Build a count of how many quests are scheduled per day
+        const dayCounts = {};
+        for (const row of allScheduled) {
+            const userDays = JSON.parse(row.days || '[]');
+            for (const day of userDays) {
+            dayCounts[day] = (dayCounts[day] || 0) + 1;
+            }
+        }
+    
+        // 🌟 Step 3: If this quest already exists, subtract its current days from the count
+        if (existing.length > 0) {
+            const currentDays = JSON.parse(existing[0].days || '[]');
+            for (const day of currentDays) {
+            dayCounts[day] = (dayCounts[day] || 0) - 1;
+            }
+        }
+    
+        // 🌟 Step 4: Check if adding new days would exceed the limit
+        const exceeded = days.some(day => (dayCounts[day] || 0) + 1 > 3);
+        if (exceeded) {
+            return reply.code(400).send({
+            success: false,
+            error: 'You can only schedule up to 3 quests per day.'
+            });
+        }
+    
+        // 🌟 Step 5: Proceed with normal logic
+        if (existing.length > 0) {
+            if (days.length === 0) {
+            await db.query(
+                `DELETE FROM scheduled_quests WHERE quest_id = ? AND user_id = ?`,
+                [quest_id, user_id]
+            );
+            return reply.send({ success: true, message: 'Quest unscheduled (deleted)' });
+            } else {
+            const daysString = JSON.stringify(days);
+            await db.query(
+                `UPDATE scheduled_quests SET days = ? WHERE quest_id = ? AND user_id = ?`,
+                [daysString, quest_id, user_id]
+            );
+            return reply.send({ success: true, message: 'Quest days updated successfully' });
+            }
+        } else {
+            if (days.length === 0) {
+            return reply.send({ success: true, message: 'No action taken (empty days)' });
+            } else {
+            const daysString = JSON.stringify(days);
+            await db.query(
+                `INSERT INTO scheduled_quests (quest_id, user_id, days) VALUES (?, ?, ?)`,
+                [quest_id, user_id, daysString]
+            );
+            return reply.send({ success: true, message: 'Quest scheduled successfully' });
+            }
+        }
+  
+    } catch (err) {
+      console.error(err);
+      reply.code(500).send({ error: 'Internal Server Error' });
+    }
+});
+  
+  
+  
 
+fastify.get('/scheduled-quests/:userId', async (request, reply) => {
+    try {
+        const { userId } = request.params;  // Access `userId` from route parameters
+        const query = `
+            SELECT q.*, sq.days
+            FROM quests q
+            LEFT JOIN scheduled_quests sq ON q.id = sq.quest_id
+            WHERE sq.user_id = ?
+        `;
+        
+        const [result] = await db.query(query, [userId]);
+    
+        if (result.length === 0) {
+            return reply.code(404).send({ message: 'No scheduled quests found for this user' });
+        }
+    
+        // Parse the `days` column if it exists (it's stored as a stringified array)
+        result.forEach(quest => {
+            if (quest.days) {
+            quest.days = JSON.parse(quest.days);  // Convert the JSON string back to an array
+            }
+        });
+    
+        reply.send(result);
+    } catch (error) {
+        console.error('Error fetching scheduled quests:', error);
+        reply.code(500).send({ message: 'Internal Server Error' });
+    }
+});
 
+fastify.post('/scheduled-quests/remove', async (request, reply) => {
+    const { questId, userId, dayToRemove } = request.body;
+
+    if (!questId || !userId || !dayToRemove) {
+        return reply.code(400).send({ error: 'Quest ID, User ID, and dayToRemove are required' });
+    }
+
+    try {
+        const [existingScheduledQuest] = await db.query(
+            'SELECT * FROM scheduled_quests WHERE quest_id = ? AND user_id = ?',
+            [questId, userId]
+        );
+
+        if (existingScheduledQuest.length === 0) {
+            return reply.code(400).send({ error: 'You have not selected this quest' });
+        }
+
+        const existingDays = JSON.parse(existingScheduledQuest[0].days || '[]');
+        const updatedDays = existingDays.filter(day => day !== dayToRemove);
+
+        if (updatedDays.length === 0) {
+            // Optional: delete the row if no days are left
+            await db.query(
+                'DELETE FROM scheduled_quests WHERE quest_id = ? AND user_id = ?',
+                [questId, userId]
+            );
+            return reply.code(200).send({ message: 'Quest removed completely because no days left' });
+        } else {
+            // Update the days column with the new array
+            await db.query(
+                'UPDATE scheduled_quests SET days = ? WHERE quest_id = ? AND user_id = ?',
+                [JSON.stringify(updatedDays), questId, userId]
+            );
+            return reply.code(200).send({ message: 'Day removed from scheduled quest' });
+        }
+
+    } catch (error) {
+        console.error('Error removing quest:', error);
+        return reply.code(500).send({ error: 'An error occurred while updating the scheduled quest' });
+    }
+});
+
+  
+  
+  
 
 // fastify.get('/quests/daily', async (request, reply) => {
 //     try {
@@ -3983,6 +4217,8 @@ fastify.post('/donate-gold', async (request, reply) => {
     }
 });
 
+
+  
 
 
 
