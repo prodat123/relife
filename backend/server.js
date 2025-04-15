@@ -587,7 +587,7 @@ cron.schedule('0 0 * * *', async () => {
     timezone: "UTC"
 });
 
-cron.schedule('5 0 * * *', async () => {
+cron.schedule('0 0 * * *', async () => {
     const currentDay = new Date().toLocaleString('en-US', { weekday: 'long' }); // "Monday", etc.
 
     try {
@@ -1017,6 +1017,7 @@ fastify.post('/quests/finish', async (request, reply) => {
         reply.code(500).send({ error: 'Failed to mark quest as finished.' });
     }
 });
+
 fastify.post('/schedule-quest', async (request, reply) => {
     console.log("Incoming body:", request.body);
   
@@ -1098,9 +1099,6 @@ fastify.post('/schedule-quest', async (request, reply) => {
       reply.code(500).send({ error: 'Internal Server Error' });
     }
 });
-  
-  
-  
 
 fastify.get('/scheduled-quests/:userId', async (request, reply) => {
     try {
