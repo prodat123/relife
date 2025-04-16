@@ -407,6 +407,8 @@ const checkSpiritHealth = async () => {
             const { level } = calculateLevel(user.experience);
                     
             const maxSpiritHealth = 50 + level;
+
+            
             // user.spiritHealth = 50 + level; // Add the level to existing spiritHealth
             
             // Update the user's spiritHealth in the database
@@ -420,8 +422,9 @@ const checkSpiritHealth = async () => {
             let newSpirit = user.spiritHealth;
 
             if (quests.length > 0) {
-                // Completed at least one quest
-                if (user.spiritHealth < user.maxSpiritHealth){
+                if(user.maxSpiritHealth < maxSpiritHealth){
+                    await db.query('UPDATE users SET spiritHealth = ?, maxSpiritHealth = ? WHERE id = ?', [maxSpiritHealth, maxSpiritHealth, user.id]);
+                }else if(user.spiritHealth < maxSpiritHealth){
                     newSpirit += 3;
                     await db.query('UPDATE users SET spiritHealth = ?, maxSpiritHealth = ? WHERE id = ?', [newSpirit, maxSpiritHealth, user.id]);
                 }
