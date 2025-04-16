@@ -182,34 +182,6 @@ fastify.post('/auth/login', async (request, reply) => {
     }
 });
 
-fastify.get("/user", async (request, reply) => {
-    try {
-        // Convert userId to an integer
-        const userId = parseInt(request.query.userId, 10);
-        console.log("User ID received:", userId);
-
-        // Validate userId
-        if (isNaN(userId)) {
-            return reply.code(400).send({ error: "Invalid User ID. It must be an integer." });
-        }
-
-        // Query to fetch user
-        const query = "SELECT * FROM users WHERE id = ?";
-        
-        // Wrap the query in a Promise for async/await support
-        const results = await db.query(query, [userId]);
-
-        // Check if user exists
-        if (results.length === 0) {
-            return reply.code(404).send({ error: "User not found" });
-        }
-        reply.code(200).send({ user: results[0] });
-    } catch (error) {
-        console.error("Error fetching user:", error);
-        return reply.code(500).send({ error: "Internal server error" });
-    }
-});
-
 // Logout Route
 fastify.post('/auth/logout', (request, reply) => {
     request.session.destroy((err) => {
@@ -220,104 +192,129 @@ fastify.post('/auth/logout', (request, reply) => {
     });
 });
 
-const insertDailyQuests = async () => {
-    const deleteQuery = `
-        DELETE FROM daily_quests WHERE date < CURDATE();
-    `;
-
-    const insertQuery = `
-        INSERT INTO daily_quests (date, quest_id)
-        SELECT CURDATE(), id
-        FROM (
-            SELECT DISTINCT id
-            FROM (
-                -- Difficulty 1-5 (Existing)
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery1
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery2
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery3
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery4
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 1 ORDER BY RAND() LIMIT 2) AS subquery5
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery6
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery7
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery8
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery9
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 2 ORDER BY RAND() LIMIT 2) AS subquery10
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery11
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery12
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery13
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery14
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (3,4,5) ORDER BY RAND() LIMIT 6) AS subquery15
-
-                -- Difficulty 6-8
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery16
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery17
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery18
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery19
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (6,7,8) ORDER BY RAND() LIMIT 6) AS subquery20
-
-                -- Difficulty 9-10
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery21
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery22
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery23
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery24
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (9,10) ORDER BY RAND() LIMIT 8) AS subquery25
-
-                -- Difficulty 11-12 (Most difficult, select the most challenging quests)
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery26
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery27
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery28
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery29
-                UNION ALL
-                SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (11,12) ORDER BY RAND() LIMIT 10) AS subquery30
-            ) AS selected_quests
-        ) AS final_quests
-        WHERE id NOT IN (
-            SELECT quest_id FROM daily_quests WHERE date = CURDATE()
-        );
-    `;
-
-
-
+fastify.get("/user-stats", async (request, reply) => {
+    console.log("THIS IS BEING CALLED");
     try {
-        // Delete previous daily quests before the current date
-        await db.query(deleteQuery);
-        console.log('Successfully removed previous daily quests.');
-
-        // Insert new daily quests
-        const [results] = await db.query(insertQuery);
-        console.log('Successfully inserted daily quests:', results);
-    } catch (err) {
-        console.error('SQL Error:', err.message);
+      // Query to count users
+      const [userCountResult] = await db.query("SELECT COUNT(*) as totalUsers FROM users");
+  
+      // Query to count quest participants
+      const [questCountResult] = await db.query("SELECT COUNT(*) as totalParticipants FROM quest_participants");
+  
+      const totalUsers = userCountResult[0].totalUsers;
+      const totalParticipants = questCountResult[0].totalParticipants;
+  
+      console.log("TOTAL USERS: " + totalUsers);
+      console.log("TOTAL PARTICIPANTS: " + totalParticipants);
+      return reply.code(200).send({
+        totalUsers,
+        totalParticipants,
+      });
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+      return reply.code(500).send({ error: "Internal server error" });
     }
-};
+});
+  
+
+// const insertDailyQuests = async () => {
+//     const deleteQuery = `
+//         DELETE FROM daily_quests WHERE date < CURDATE();
+//     `;
+
+//     const insertQuery = `
+//         INSERT INTO daily_quests (date, quest_id)
+//         SELECT CURDATE(), id
+//         FROM (
+//             SELECT DISTINCT id
+//             FROM (
+//                 -- Difficulty 1-5 (Existing)
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery1
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery2
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery3
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 1 AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 2) AS subquery4
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 1 ORDER BY RAND() LIMIT 2) AS subquery5
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery6
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery7
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery8
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 2 AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 1) AS subquery9
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty = 2 ORDER BY RAND() LIMIT 2) AS subquery10
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery11
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery12
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery13
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (3,4,5) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery14
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (3,4,5) ORDER BY RAND() LIMIT 6) AS subquery15
+
+//                 -- Difficulty 6-8
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery16
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery17
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery18
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (6,7,8) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 3) AS subquery19
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (6,7,8) ORDER BY RAND() LIMIT 6) AS subquery20
+
+//                 -- Difficulty 9-10
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery21
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery22
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery23
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (9,10) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 4) AS subquery24
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (9,10) ORDER BY RAND() LIMIT 8) AS subquery25
+
+//                 -- Difficulty 11-12 (Most difficult, select the most challenging quests)
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.strength') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery26
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.bravery') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery27
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.intelligence') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery28
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (11,12) AND JSON_EXTRACT(stat_reward, '$.endurance') IS NOT NULL ORDER BY RAND() LIMIT 5) AS subquery29
+//                 UNION ALL
+//                 SELECT id FROM (SELECT id FROM quests WHERE type = 'daily' AND difficulty IN (11,12) ORDER BY RAND() LIMIT 10) AS subquery30
+//             ) AS selected_quests
+//         ) AS final_quests
+//         WHERE id NOT IN (
+//             SELECT quest_id FROM daily_quests WHERE date = CURDATE()
+//         );
+//     `;
+
+
+
+//     try {
+//         // Delete previous daily quests before the current date
+//         await db.query(deleteQuery);
+//         console.log('Successfully removed previous daily quests.');
+
+//         // Insert new daily quests
+//         const [results] = await db.query(insertQuery);
+//         console.log('Successfully inserted daily quests:', results);
+//     } catch (err) {
+//         console.error('SQL Error:', err.message);
+//     }
+// };
 
 const clearCompletedQuestParticipants = async () => {
     const query = `
@@ -335,56 +332,56 @@ const clearCompletedQuestParticipants = async () => {
 };
 
 
-const checkAndUpdateVows = async () => {
-    try {
-        console.log("Checking for overdue vows...");
+// const checkAndUpdateVows = async () => {
+//     try {
+//         console.log("Checking for overdue vows...");
 
-        // Get all active vows from the database
-        const [vows] = await db.query('SELECT * FROM vows WHERE status = "active"');
+//         // Get all active vows from the database
+//         const [vows] = await db.query('SELECT * FROM vows WHERE status = "active"');
 
-        // Get the current date in YYYY-MM-DD format
-        const currentDate = new Date().toISOString().split('T')[0];
+//         // Get the current date in YYYY-MM-DD format
+//         const currentDate = new Date().toISOString().split('T')[0];
 
-        for (const vow of vows) {
-            const vowDeadline = new Date(vow.deadline);
-            vowDeadline.setDate(vowDeadline.getDate()); // Add 1 day to match moment.js behavior
+//         for (const vow of vows) {
+//             const vowDeadline = new Date(vow.deadline);
+//             vowDeadline.setDate(vowDeadline.getDate()); // Add 1 day to match moment.js behavior
 
-            // Convert to YYYY-MM-DD format for comparison
-            const vowDeadlineFormatted = vowDeadline.toISOString().split('T')[0];
+//             // Convert to YYYY-MM-DD format for comparison
+//             const vowDeadlineFormatted = vowDeadline.toISOString().split('T')[0];
 
-            if (currentDate > vowDeadlineFormatted) {
-                // Deadline passed, mark vow as incomplete
-                await db.query('UPDATE vows SET status = "incomplete" WHERE id = ?', [vow.id]);
+//             if (currentDate > vowDeadlineFormatted) {
+//                 // Deadline passed, mark vow as incomplete
+//                 await db.query('UPDATE vows SET status = "incomplete" WHERE id = ?', [vow.id]);
 
-                console.log(`Vow ID ${vow.id} marked as incomplete.`);
+//                 console.log(`Vow ID ${vow.id} marked as incomplete.`);
 
-                // Fetch user stats from the users table
-                const [userRows] = await db.query('SELECT stats FROM users WHERE id = ?', [vow.created_by]);
+//                 // Fetch user stats from the users table
+//                 const [userRows] = await db.query('SELECT stats FROM users WHERE id = ?', [vow.created_by]);
 
-                if (userRows.length > 0) {
-                    let userStats = JSON.parse(userRows[0].stat);
-                    let statRewards = JSON.parse(vow.stat_reward);
+//                 if (userRows.length > 0) {
+//                     let userStats = JSON.parse(userRows[0].stat);
+//                     let statRewards = JSON.parse(vow.stat_reward);
 
-                    // Subtract the stat rewards from user stats
-                    for (const stat in statRewards) {
-                        if (userStats[stat] !== undefined) {
-                            userStats[stat] = Math.max(0, userStats[stat] - (statRewards[stat] * 2)); // Ensure no negative values
-                        }
-                    }
+//                     // Subtract the stat rewards from user stats
+//                     for (const stat in statRewards) {
+//                         if (userStats[stat] !== undefined) {
+//                             userStats[stat] = Math.max(0, userStats[stat] - (statRewards[stat] * 2)); // Ensure no negative values
+//                         }
+//                     }
 
-                    // Update the user's stats in the database
-                    await db.query('UPDATE users SET stats = ? WHERE id = ?', [JSON.stringify(userStats), vow.created_by]);
+//                     // Update the user's stats in the database
+//                     await db.query('UPDATE users SET stats = ? WHERE id = ?', [JSON.stringify(userStats), vow.created_by]);
 
-                    console.log(`User ID ${vow.created_by} stats updated.`);
-                }
-            }
-        }
+//                     console.log(`User ID ${vow.created_by} stats updated.`);
+//                 }
+//             }
+//         }
 
-        console.log("Vow check complete.");
-    } catch (error) {
-        console.error("Error processing vows:", error);
-    }
-};
+//         console.log("Vow check complete.");
+//     } catch (error) {
+//         console.error("Error processing vows:", error);
+//     }
+// };
 
 const calculateLevel = (experience) => { 
     let level = 1;
@@ -588,16 +585,16 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 cron.schedule('0 0 * * *', async () => {
-    const currentDay = new Date().toLocaleString('en-US', { weekday: 'long' }); // "Monday", etc.
-
+    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const currentDay = daysOfWeek[new Date().getUTCDay()]; // returns e.g., "Monday"
+  
     try {
       const [scheduled] = await db.query('SELECT * FROM scheduled_quests');
-
+  
       for (const row of scheduled) {
         const daysArray = JSON.parse(row.days || '[]');
-
+  
         if (daysArray.includes(currentDay)) {
-          // Use internal DB logic instead of hitting your own API
           await autoSelectQuest(row.quest_id, row.user_id);
           console.log(`✅ Auto-started quest ${row.quest_id} for user ${row.user_id} on ${currentDay}`);
         }
@@ -605,10 +602,13 @@ cron.schedule('0 0 * * *', async () => {
     } catch (err) {
       console.error('❌ Error running daily cron:', err);
     }
-}, { 
+}, {
     scheduled: true,
     timezone: "UTC"
 });
+  
+
+
 
 
 // Get quests by type
@@ -628,8 +628,6 @@ fastify.get('/quests', async (request, reply) => {
         return reply.code(500).send({ message: 'Internal Server Error' });
     }
 });
-
-  
 
 fastify.get('/quest/:id', async (request, reply) => {
     try {
@@ -1333,7 +1331,7 @@ fastify.get('/leaderboard', async (request, reply) => {
 
     try {
         const page = 1;
-        const limit = 100;
+        const limit = 5000;
         const offset = (page - 1) * limit;
 
         const [users] = await db.query(`
