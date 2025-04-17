@@ -582,23 +582,7 @@ async function autoSelectQuest(questId, userId) {
 
 cron.schedule('0 0 * * *', async () => { 
     await clearCompletedQuestParticipants();
-    // await insertDailyQuests();
-    // await checkAndUpdateVows();
-}, {
-    scheduled: true,
-    timezone: "UTC"
-});
-
-cron.schedule('59 11 * * *', async () => {
-    await checkSpiritHealth();
-}, {
-    scheduled: true,
-    timezone: "UTC"
-});
-
-
-
-cron.schedule('0 0 * * *', async () => {
+    
     const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const currentDay = daysOfWeek[new Date().getUTCDay()]; // returns e.g., "Monday"
   
@@ -616,10 +600,20 @@ cron.schedule('0 0 * * *', async () => {
     } catch (err) {
       console.error('❌ Error running daily cron:', err);
     }
+    // await insertDailyQuests();
+    // await checkAndUpdateVows();
 }, {
     scheduled: true,
     timezone: "UTC"
 });
+
+cron.schedule('59 11 * * *', async () => {
+    await checkSpiritHealth();
+}, {
+    scheduled: true,
+    timezone: "UTC"
+});
+
   
 
 
