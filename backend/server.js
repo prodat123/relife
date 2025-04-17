@@ -582,7 +582,7 @@ async function autoSelectQuest(questId, userId) {
 
 cron.schedule('0 0 * * *', async () => { 
     await clearCompletedQuestParticipants();
-    
+
     const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const currentDay = daysOfWeek[new Date().getUTCDay()]; // returns e.g., "Monday"
   
@@ -607,7 +607,7 @@ cron.schedule('0 0 * * *', async () => {
     timezone: "UTC"
 });
 
-cron.schedule('59 11 * * *', async () => {
+cron.schedule('59 23 * * *', async () => {
     await checkSpiritHealth();
 }, {
     scheduled: true,
