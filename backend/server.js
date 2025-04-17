@@ -420,8 +420,10 @@ const checkSpiritHealth = async () => {
             );
 
             let newSpirit = user.spiritHealth;
+            console.log(quests);
 
             if (quests.length > 0) {
+                console.log(user.id + "HAS DONE A QUEST")
                 if(user.maxSpiritHealth < maxSpiritHealth){
                     await db.query('UPDATE users SET spiritHealth = ?, maxSpiritHealth = ? WHERE id = ?', [maxSpiritHealth, maxSpiritHealth, user.id]);
                 }else if(user.spiritHealth < maxSpiritHealth){
@@ -429,6 +431,7 @@ const checkSpiritHealth = async () => {
                     await db.query('UPDATE users SET spiritHealth = ?, maxSpiritHealth = ? WHERE id = ?', [newSpirit, maxSpiritHealth, user.id]);
                 }
             } else {
+                console.log(user.id + "NO QUEST");
                 // No quests completed
                 newSpirit = Math.max(user.spiritHealth - 5, 0);
                 await db.query('UPDATE users SET spiritHealth = ?, maxSpiritHealth = ? WHERE id = ?', [newSpirit, maxSpiritHealth, user.id]);
@@ -586,6 +589,15 @@ cron.schedule('0 0 * * *', async () => {
     scheduled: true,
     timezone: "UTC"
 });
+
+cron.schedule('59 11 * * *', async () => {
+    await checkSpiritHealth();
+}, {
+    scheduled: true,
+    timezone: "UTC"
+});
+
+
 
 cron.schedule('0 0 * * *', async () => {
     const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
