@@ -581,7 +581,6 @@ async function autoSelectQuest(questId, userId) {
 }
 
 cron.schedule('0 0 * * *', async () => { 
-    await checkSpiritHealth();
     await clearCompletedQuestParticipants();
     // await insertDailyQuests();
     // await checkAndUpdateVows();
