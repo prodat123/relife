@@ -1672,7 +1672,7 @@ fastify.post("/add-currency", async (request, reply) => {
             // Reset the tower state and increment numberOfRuns
             const updateTowerQuery = `
                 UPDATE tower_players
-                SET active = 0, floor = 0
+                SET active = 0, floor = 0, numberOfRuns = numberOfRuns + 1
                 WHERE userId = ?;
             `;
             await db.query(updateTowerQuery, [id]);
@@ -2141,7 +2141,7 @@ fastify.post('/tower-restart', async (request, reply) => {
     const checkQuery = `SELECT * FROM tower_players WHERE userId = ?;`;
     const restartQuery = `
         UPDATE tower_players
-        SET floor = 0, numberOfRuns = numberOfRuns + 1
+        SET floor = 0
         WHERE userId = ?;
     `;
 
