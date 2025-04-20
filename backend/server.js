@@ -587,6 +587,10 @@ cron.schedule('0 0 * * *', async () => {
     const currentDay = daysOfWeek[new Date().getUTCDay()]; // returns e.g., "Monday"
   
     try {
+      // ✅ Reset numberOfRuns in tower_players
+      await db.query('UPDATE tower_players SET numberOfRuns = 0');
+      console.log('🔁 Reset numberOfRuns to 0 for all tower players');
+
       const [scheduled] = await db.query('SELECT * FROM scheduled_quests');
   
       for (const row of scheduled) {
@@ -600,12 +604,14 @@ cron.schedule('0 0 * * *', async () => {
     } catch (err) {
       console.error('❌ Error running daily cron:', err);
     }
+
     // await insertDailyQuests();
     // await checkAndUpdateVows();
 }, {
     scheduled: true,
     timezone: "UTC"
 });
+
 
 cron.schedule('59 23 * * *', async () => {
     await checkSpiritHealth();
@@ -1619,15 +1625,14 @@ fastify.get("/stages", async (request, reply) => {
 fastify.post("/add-currency", async (request, reply) => {
     const { id } = request.body;  // 'id' is the tower ID
 
-    // Check for missing parameters
     if (id === undefined) {
         return reply.code(400).send({ error: "Missing tower ID." });
     }
 
     try {
-        // Find the userId and floor associated with the given tower id
+        // Get userId, floor, and numberOfRuns from tower_players
         const [playerResult] = await db.query(`
-            SELECT userId, floor
+            SELECT userId, floor, numberOfRuns
             FROM tower_players 
             WHERE userId = ?
         `, [id]);
@@ -1636,40 +1641,43 @@ fastify.post("/add-currency", async (request, reply) => {
             return reply.code(404).send({ error: "Tower not found." });
         }
 
-        const { userId, floor } = playerResult[0];
+        const { userId, floor, numberOfRuns } = playerResult[0];
 
-        // Sum up the currency rewards for each floor the player has reached
+        // Get total reward from stages
         const [rewardResult] = await db.query(`
             SELECT SUM(currency_reward) AS totalReward
             FROM stages
             WHERE id <= ?
         `, [floor]);
 
-        const reward = rewardResult[0].totalReward || 0;
+        const baseReward = rewardResult[0].totalReward || 0;
 
-        // If no reward, return a message
-        if (reward === 0) {
+        if (baseReward === 0) {
             return reply.code(200).send({ message: "No currency added as reward is 0." });
         }
 
-        // Update the currency of the user
-        const updateQuery = `
+        // Apply scaling formula
+        const multiplier = 3 / (1 + 0.2 * numberOfRuns);
+        const scaledReward = Math.round(baseReward * multiplier);
+
+        // Update user currency
+        const updateUserQuery = `
             UPDATE users 
-            SET currency = currency + ? 
+            SET currency = currency + ?
             WHERE id = ?
         `;
-        const [updateResult] = await db.query(updateQuery, [reward, userId]);
+        const [updateResult] = await db.query(updateUserQuery, [scaledReward, userId]);
 
         if (updateResult.affectedRows > 0) {
-            // After updating currency, delete the row from tower_players
-            const updateQuery = `
+            // Reset the tower state and increment numberOfRuns
+            const updateTowerQuery = `
                 UPDATE tower_players
                 SET active = 0, floor = 0
                 WHERE userId = ?;
             `;
-            await db.query(updateQuery, [id]);
+            await db.query(updateTowerQuery, [id]);
 
-            return reply.code(200).send({ reward });
+            return reply.code(200).send({ reward: scaledReward });
         } else {
             return reply.code(404).send({ error: "User not found." });
         }
@@ -1679,6 +1687,8 @@ fastify.post("/add-currency", async (request, reply) => {
         return reply.code(500).send({ error: "Internal server error." });
     }
 });
+
+
 
 fastify.get('/shop/items', async (request, reply) => {
     try {
@@ -2004,10 +2014,6 @@ fastify.post('/spell-shop/buy', async (request, reply) => {
         reply.code(500).send({ error: 'Failed to purchase spell.' });
     }
 });
-
-
-
-// fastify.post('/spin-wheel', async (request, reply) => {
 //     const { userId, intelligence } = request.body;
 
 //     if (!userId || intelligence === undefined) {
@@ -2135,7 +2141,7 @@ fastify.post('/tower-restart', async (request, reply) => {
     const checkQuery = `SELECT * FROM tower_players WHERE userId = ?;`;
     const restartQuery = `
         UPDATE tower_players
-        SET floor = 0
+        SET floor = 0, numberOfRuns = numberOfRuns + 1
         WHERE userId = ?;
     `;
 
@@ -2194,7 +2200,7 @@ fastify.get('/tower-floor', async (request, reply) => {
     }
 
     const query = `
-        SELECT floor FROM tower_players
+        SELECT floor, numberOfRuns FROM tower_players
         WHERE userId = ?;
     `;
 
@@ -2202,11 +2208,11 @@ fastify.get('/tower-floor', async (request, reply) => {
         const [rows] = await db.query(query, [parseInt(userId, 10)]);
 
         if (rows.length === 0) {
-            return reply.code(200).send({ floor: 0 });
+            return reply.code(200).send({ floor: 0, numOfRuns: 0 });
             // return reply.code(404).send({ message: 'Player not found.' });
         }
 
-        return reply.code(200).send({ floor: rows[0].floor });
+        return reply.code(200).send({ floor: rows[0].floor, numOfRuns: rows[0].numberOfRuns });
     } catch (error) {
         console.error('Error in tower-floor:', error);
         return reply.code(500).send({ error: 'Internal server error.' });
@@ -2476,119 +2482,137 @@ fastify.post('/vows/finish', async (request, reply) => {
 });
 
 fastify.get('/completed-quests-stats', async (request, reply) => {
-    const { userId, date } = request.query;
-
-    if (!userId) {
-        return reply.code(400).send({ error: 'User ID is required' });
-    }
-
-    if (!date) {
-        return reply.code(400).send({ error: 'Date is required' });
+    const { userId, daysRange } = request.query;
+    console.log(userId, daysRange);
+    
+    if (!userId || !daysRange) {
+        return reply.code(400).send({ error: 'User ID and daysRange are required' });
     }
 
     try {
-        const currentDateStr = date;
+        const days = parseInt(daysRange);
+        if (isNaN(days) || days <= 0) {
+            return reply.code(400).send({ error: 'Invalid daysRange value' });
+        }
 
-        // Parse input date and calculate one week ago, including today
-        const currentDate = new Date(currentDateStr);
-        const oneWeekAgoDate = new Date(currentDate);
-        oneWeekAgoDate.setDate(currentDate.getDate() - 6);
+        const currentDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(currentDate.getDate() - (days - 1));
 
-        const oneWeekAgoStr = oneWeekAgoDate.toISOString().split('T')[0];
+        const currentDateStr = currentDate.toISOString().split('T')[0];
+        const startDateStr = startDate.toISOString().split('T')[0];
 
         const [questParticipants] = await db.query(
             `SELECT qp.quest_id, qp.completed_at
              FROM quest_participants qp
              WHERE qp.user_id = ? AND qp.completed = 1
-             AND qp.completed_at BETWEEN ? AND ?`,
-            [userId, oneWeekAgoStr, currentDateStr]
+             AND DATE(qp.completed_at) BETWEEN ? AND ?`,
+            [userId, startDateStr, currentDateStr]
         );
 
-        const [vows] = await db.query(
-            `SELECT v.id, v.completed_at, v.stat_reward
-             FROM vows v
-             WHERE v.created_by = ? 
-             AND v.status = 'completed'
-             AND v.completed_at BETWEEN ? AND ?`,
-            [userId, oneWeekAgoStr, currentDateStr]
-        );
-
-        if (questParticipants.length === 0 && vows.length === 0) {
-            const result = Array.from({ length: 7 }, (_, i) => {
-                const day = new Date(oneWeekAgoDate);
-                day.setDate(oneWeekAgoDate.getDate() + i);
+        if (questParticipants.length === 0) {
+            const result = Array.from({ length: days }, (_, i) => {
+                const day = new Date(startDate);
+                day.setDate(startDate.getDate() + i);
                 const dateStr = day.toISOString().split('T')[0];
-                return { date: dateStr, stats: { strength: 0, bravery: 0, intelligence: 0, endurance: 0 } };
+                return {
+                    date: dateStr,
+                    stats: {
+                        strength: 0,
+                        bravery: 0,
+                        intelligence: 0,
+                        endurance: 0
+                    },
+                    tags: []
+                };
             });
             return reply.send(result);
         }
 
         const questIds = questParticipants.map(qp => qp.quest_id);
         const [quests] = questIds.length
-            ? await db.query('SELECT id, stat_reward FROM quests WHERE id IN (?)', [questIds])
+            ? await db.query('SELECT id, stat_reward, tags FROM quests WHERE id IN (?)', [questIds])
             : [[]];
 
-        const questRewards = quests.reduce((acc, quest) => {
-            acc[quest.id] = JSON.parse(quest.stat_reward);
-            return acc;
-        }, {});
+        const questRewards = {};
+        const questTags = {};
+
+        quests.forEach(quest => {
+            questRewards[quest.id] = JSON.parse(quest.stat_reward);
+            questTags[quest.id] = JSON.parse(quest.tags); // Parse tags as JSON here
+        });
 
         const statsPerDay = {};
 
         questParticipants.forEach(participant => {
             const completedDateStr = participant.completed_at.slice(0, 10);
             const statReward = questRewards[participant.quest_id];
+            const tags = questTags[participant.quest_id]; // Get the parsed tags here
+
             if (!statReward) return;
 
             if (!statsPerDay[completedDateStr]) {
-                statsPerDay[completedDateStr] = { strength: 0, bravery: 0, intelligence: 0, endurance: 0 };
+                statsPerDay[completedDateStr] = {
+                    strength: 0,
+                    bravery: 0,
+                    intelligence: 0,
+                    endurance: 0,
+                    tags: new Set()
+                };
             }
 
             statsPerDay[completedDateStr].strength += statReward.strength || 0;
             statsPerDay[completedDateStr].bravery += statReward.bravery || 0;
             statsPerDay[completedDateStr].intelligence += statReward.intelligence || 0;
             statsPerDay[completedDateStr].endurance += statReward.endurance || 0;
-        });
 
-        vows.forEach(vow => {
-            const completedDateStr = vow.completed_at.slice(0, 10);
-            const statReward = JSON.parse(vow.stat_reward);
-
-            if (!statsPerDay[completedDateStr]) {
-                statsPerDay[completedDateStr] = { strength: 0, bravery: 0, intelligence: 0, endurance: 0 };
+            if (tags && Array.isArray(tags)) {
+                tags.forEach(tag => statsPerDay[completedDateStr].tags.add(tag.trim())); // If tags is an array, add each tag
             }
-
-            statsPerDay[completedDateStr].strength += statReward.strength || 0;
-            statsPerDay[completedDateStr].bravery += statReward.bravery || 0;
-            statsPerDay[completedDateStr].intelligence += statReward.intelligence || 0;
-            statsPerDay[completedDateStr].endurance += statReward.endurance || 0;
         });
 
-        const result = Array.from({ length: 7 }, (_, i) => {
-            const day = new Date(oneWeekAgoDate); 
-            day.setDate(oneWeekAgoDate.getDate() + i); 
-            const dateStr = day.toISOString().split('T')[0]; 
-        
-            const stats = statsPerDay[dateStr] || { strength: 0, bravery: 0, intelligence: 0, endurance: 0 };
-        
-            return { date: dateStr, stats };
+        const result = Array.from({ length: days }, (_, i) => {
+            const day = new Date(startDate);
+            day.setDate(startDate.getDate() + i);
+            const dateStr = day.toISOString().split('T')[0];
+
+            const statsEntry = statsPerDay[dateStr] || {
+                strength: 0,
+                bravery: 0,
+                intelligence: 0,
+                endurance: 0,
+                tags: new Set()
+            };
+
+            return {
+                date: dateStr,
+                stats: {
+                    strength: statsEntry.strength,
+                    bravery: statsEntry.bravery,
+                    intelligence: statsEntry.intelligence,
+                    endurance: statsEntry.endurance
+                },
+                tags: Array.from(statsEntry.tags) // Convert the Set to an array before returning
+            };
         });
-        
+
         reply.send(result);
     } catch (error) {
-        console.error('Error fetching completed quests and vows stats:', error);
+        console.error('Error fetching completed quest stats:', error);
         reply.code(500).send({ error: 'Failed to fetch stats' });
     }
 });
 
+
+
+
+
 fastify.get('/total-completed-quests-stats', async (request, reply) => {
     try {
-        // Get the current date and the date 7 days ago
         const currentDate = new Date();
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(currentDate.getDate() - 7);
 
-        // Convert to MySQL compatible format (YYYY-MM-DD)
         const formatDate = (date) => {
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -2599,78 +2623,45 @@ fastify.get('/total-completed-quests-stats', async (request, reply) => {
         const currentDateStr = formatDate(currentDate);
         const oneWeekAgoStr = formatDate(oneWeekAgo);
 
-        // Query to get all completed quests within the last week for ALL users
         const [questParticipants] = await db.query(
-            `SELECT qp.quest_id, qp.completed_at, qp.user_id
+            `SELECT qp.quest_id
              FROM quest_participants qp
              WHERE qp.completed = 1
-             AND qp.completed_at >= ? AND qp.completed_at <= ?`,
+             AND DATE(qp.completed_at) BETWEEN ? AND ?`,
             [oneWeekAgoStr, currentDateStr]
         );
 
-        // Query to get all completed vows within the last week
-        const [vows] = await db.query(
-            `SELECT v.id, v.completed_at, v.stat_reward
-             FROM vows v
-             WHERE v.status = 'completed'
-             AND v.completed_at BETWEEN ? AND ?`,
-            [oneWeekAgoStr, currentDateStr]
-        );
-
-        if (questParticipants.length === 0 && vows.length === 0) {
-            // Return stats with zero values for the week if no quests or vows completed
+        if (questParticipants.length === 0) {
             return reply.send({ stats: { strength: 0, bravery: 0, intelligence: 0, endurance: 0 } });
         }
 
-        // Get all the quest stat_rewards for the fetched quest_ids
         const questIds = questParticipants.map(qp => qp.quest_id);
-        const [quests] = questIds.length
-            ? await db.query('SELECT id, stat_reward FROM quests WHERE id IN (?)', [questIds])
-            : [[]];
+        const [quests] = await db.query(
+            'SELECT id, stat_reward FROM quests WHERE id IN (?)',
+            [questIds]
+        );
 
-        // Prepare a map of quest_id -> stat_reward
-        const questRewards = quests.reduce((acc, quest) => {
-            const parsedStatReward = JSON.parse(quest.stat_reward);
-            acc[quest.id] = parsedStatReward;
-            return acc;
-        }, {});
-
-        // Aggregate stats for the entire week
-        let statsArray = {
+        const statsArray = {
             strength: [],
             bravery: [],
             intelligence: [],
             endurance: []
         };
 
-        // Process quest stats
-        questParticipants.forEach(participant => {
-            const statReward = questRewards[participant.quest_id];
-            if (!statReward) return;
-
+        quests.forEach(quest => {
+            const statReward = JSON.parse(quest.stat_reward);
             if (statReward.strength) statsArray.strength.push(statReward.strength);
             if (statReward.bravery) statsArray.bravery.push(statReward.bravery);
             if (statReward.intelligence) statsArray.intelligence.push(statReward.intelligence);
             if (statReward.endurance) statsArray.endurance.push(statReward.endurance);
         });
 
-        // Process vow stats
-        vows.forEach(vow => {
-            const statReward = JSON.parse(vow.stat_reward);
-            if (statReward.strength) statsArray.strength.push(statReward.strength);
-            if (statReward.bravery) statsArray.bravery.push(statReward.bravery);
-            if (statReward.intelligence) statsArray.intelligence.push(statReward.intelligence);
-            if (statReward.endurance) statsArray.endurance.push(statReward.endurance);
-        });
-
-        // Helper function to calculate the median, excluding zeros
         const calculateMedian = (arr) => {
             const nonZeroArr = arr.filter(value => value !== 0);
             nonZeroArr.sort((a, b) => a - b);
             const len = nonZeroArr.length;
 
             if (len === 0) return 0;
-
             if (len % 2 === 1) {
                 return nonZeroArr[Math.floor(len / 2)];
             } else {
@@ -2679,23 +2670,21 @@ fastify.get('/total-completed-quests-stats', async (request, reply) => {
             }
         };
 
-        // Calculate median for each stat
         const totalStats = {
             strength: calculateMedian(statsArray.strength),
             bravery: calculateMedian(statsArray.bravery),
             intelligence: calculateMedian(statsArray.intelligence),
-            endurance: calculateMedian(statsArray.endurance),
+            endurance: calculateMedian(statsArray.endurance)
         };
 
         console.log(totalStats);
-
-        // Return the median stats for the week for all users
         reply.send({ stats: totalStats });
     } catch (error) {
-        console.error('Error fetching completed quests and vows stats:', error);
+        console.error('Error fetching total completed quest stats:', error);
         reply.code(500).send({ error: 'Failed to fetch stats' });
     }
 });
+
 
 fastify.get('/spells', async (request, reply) => {
     try {
