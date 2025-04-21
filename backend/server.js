@@ -427,6 +427,9 @@ const checkSpiritHealth = async () => {
                 if(user.maxSpiritHealth < maxSpiritHealth){
                     await db.query('UPDATE users SET spiritHealth = ?, maxSpiritHealth = ? WHERE id = ?', [maxSpiritHealth, maxSpiritHealth, user.id]);
                 }else if(user.spiritHealth < maxSpiritHealth){
+                    if(user.spiritHealth + 3 >= maxSpiritHealth){
+                        await db.query('UPDATE users SET spiritHealth = maxSpiritHealth, maxSpiritHealth = ? WHERE id = ?', [maxSpiritHealth, user.id]);
+                    }
                     newSpirit += 3;
                     await db.query('UPDATE users SET spiritHealth = ?, maxSpiritHealth = ? WHERE id = ?', [newSpirit, maxSpiritHealth, user.id]);
                 }
@@ -1623,7 +1626,7 @@ fastify.get("/stages", async (request, reply) => {
 });
 
 fastify.post("/add-currency", async (request, reply) => {
-    const { id } = request.body;  // 'id' is the tower ID
+    const { id } = request.body; 
 
     if (id === undefined) {
         return reply.code(400).send({ error: "Missing tower ID." });
