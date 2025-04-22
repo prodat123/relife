@@ -423,15 +423,15 @@ const checkSpiritHealth = async () => {
             console.log(quests);
 
             if (quests.length > 0) {
-                console.log(user.id + "HAS DONE A QUEST")
                 if(user.maxSpiritHealth < maxSpiritHealth){
                     await db.query('UPDATE users SET spiritHealth = ?, maxSpiritHealth = ? WHERE id = ?', [maxSpiritHealth, maxSpiritHealth, user.id]);
                 }else if(user.spiritHealth < maxSpiritHealth){
                     if(user.spiritHealth + 3 >= maxSpiritHealth){
                         await db.query('UPDATE users SET spiritHealth = maxSpiritHealth, maxSpiritHealth = ? WHERE id = ?', [maxSpiritHealth, user.id]);
+                    }else{
+                        newSpirit += 3;
+                        await db.query('UPDATE users SET spiritHealth = ?, maxSpiritHealth = ? WHERE id = ?', [newSpirit, maxSpiritHealth, user.id]);
                     }
-                    newSpirit += 3;
-                    await db.query('UPDATE users SET spiritHealth = ?, maxSpiritHealth = ? WHERE id = ?', [newSpirit, maxSpiritHealth, user.id]);
                 }
             } else {
                 console.log(user.id + "NO QUEST");
@@ -898,14 +898,14 @@ fastify.post('/quests/finish', async (request, reply) => {
         }
 
         const [quest] = await db.query(
-            `SELECT experience_reward, item_reward, stat_reward, tags, type, period FROM quests WHERE id = ?`,
+            `SELECT name, experience_reward, item_reward, stat_reward, tags, type, period FROM quests WHERE id = ?`,
             [questId]
         );
         if (quest.length === 0) {
             return reply.code(404).send({ error: 'Quest not found.' });
         }
 
-        const { experience_reward: experienceReward, item_reward: itemReward, stat_reward: statReward, tags: questTags, type: questType, period } = quest[0];
+        const { name: questName, experience_reward: experienceReward, item_reward: itemReward, stat_reward: statReward, tags: questTags, type: questType, period } = quest[0];
         const formattedTags = JSON.parse(questTags);
 
         const [claimable] = await db.query(
@@ -1017,6 +1017,130 @@ fastify.post('/quests/finish', async (request, reply) => {
                 [JSON.stringify(userStats), JSON.stringify(playerTags), userId]
             );
         }
+
+        // --- Check if this quest contributes to a path step ---
+        const [activePaths] = await db.query(
+            `SELECT pp.*, p.*
+             FROM path_participants pp
+             JOIN paths p ON pp.path_id = p.id
+             WHERE pp.user_id = ?`,
+            [userId]
+        );
+          
+        
+        if (activePaths.length > 0) {
+            const completedQuestName = questName;
+            const completedQuestTags = formattedTags;
+            const updatedStats = statRewardThisPeriod;
+        
+            for (let path of activePaths) {
+                const steps = JSON.parse(path.steps);
+                const progress = path.progress || 0;
+                const currentStep = steps[progress];
+                if (!currentStep) continue;
+            
+                const { requirement } = currentStep;
+            
+                let contributes = false;
+            
+                // Check if quest name matches required
+                if (
+                    requirement.questNames &&
+                    requirement.questNames.includes(completedQuestName)
+                ) {
+                    contributes = true;
+                    console.log("THIS IS TRUE - name");
+                }
+            
+                // Check if any tag from this quest matches required
+                if (
+                    requirement.questTags &&
+                    completedQuestTags.some(tag => requirement.questTags.includes(tag))
+                ) {
+                    contributes = true;
+                    console.log("THIS IS TRUE - tags");
+                }
+            
+                // Check if any updated stat matches required stat condition
+                if (
+                    requirement.questStats &&
+                    Object.keys(updatedStats).some(stat => requirement.questStats.includes(stat))
+                ) {
+                    contributes = true;
+                    console.log("THIS IS TRUE - stats");
+                }
+            
+                if (contributes) {
+                    // Get joined_at for this path
+                    const [[{ joined_at }]] = await db.query(
+                      `SELECT joined_at FROM path_participants WHERE user_id = ? AND path_id = ?`,
+                      [userId, path.id] // path.pathId should be the actual path reference in user_paths
+                    );
+                  
+                    const [participantQuests] = await db.query(
+                      `SELECT qp.quest_id, qp.joined_at_datetime, q.name, q.tags, q.stat_reward
+                       FROM quest_participants qp
+                       JOIN quests q ON qp.quest_id = q.id
+                       WHERE qp.user_id = ? AND qp.joined_at_datetime > ?`,
+                      [userId, joined_at]
+                    );
+                  
+                    const completedQuestNames = participantQuests.map(q => q.name);
+                    const completedTags = [
+                      ...new Set(participantQuests.flatMap(q => JSON.parse(q.tags || '[]')))
+                    ];
+                  
+                    // Aggregate stats from all completed quests
+                    const completedStats = {};
+                    for (const quest of participantQuests) {
+                      const statRewards = JSON.parse(quest.stat_reward || '{}');
+                      for (let stat in statRewards) {
+                        completedStats[stat] = (completedStats[stat] || 0) + statRewards[stat];
+                      }
+                    }
+                  
+                    const hasRequiredTags =
+                      !requirement.questTags ||
+                      requirement.questTags.every(tag => completedTags.includes(tag));
+                  
+                    const hasRequiredQuests =
+                      !requirement.questNames ||
+                      requirement.questNames.every(name => completedQuestNames.includes(name));
+                  
+                    const hasRequiredStats =
+                      !requirement.questStats ||
+                      requirement.questStats.every(stat => completedStats[stat] && completedStats[stat] > 0);
+                  
+                    const totalMatchingQuests = participantQuests.filter(q => {
+                      const questTags = JSON.parse(q.tags || '[]');
+                      return (
+                        (!requirement.questNames || requirement.questNames.includes(q.name)) ||
+                        (!requirement.questTags || questTags.some(tag => requirement.questTags.includes(tag)))
+                      );
+                    }).length;
+                  
+                    const meetsNumRequirement =
+                      !requirement.numOfQuests || totalMatchingQuests >= requirement.numOfQuests;
+                  
+                    if (
+                      hasRequiredTags &&
+                      hasRequiredQuests &&
+                      hasRequiredStats &&
+                      meetsNumRequirement
+                    ) {
+                      const isFinalStep = progress + 1 >= steps.length;
+                      await db.query(
+                        `UPDATE path_participants 
+                         SET progress = ?, completed_at = ?
+                         WHERE path_id = ? AND user_id = ?`,
+                        [progress + 1, isFinalStep ? new Date() : null, path.id, userId]
+                      );
+                    }
+                }
+                  
+            }
+        }
+  
         
 
         // (Optional) Item reward logic can be added here
@@ -2704,6 +2828,7 @@ fastify.get('/spells', async (request, reply) => {
 fastify.post('/updateSpells', async (request, reply) => {
     const { userId, spellSlots } = request.body; // Destructure from request body
 
+    console.log(spellSlots)
     // Prepare spell list while maintaining order
     const orderedSpells = [
         spellSlots.first || null,
@@ -2714,6 +2839,8 @@ fastify.post('/updateSpells', async (request, reply) => {
 
     // Convert the spell list to a string (comma-separated or JSON)
     const spellsString = JSON.stringify(orderedSpells);
+
+    console.log(spellsString);
 
     try {
         const query = `
@@ -4180,13 +4307,163 @@ fastify.post('/donate-gold', async (request, reply) => {
     }
 });
 
+fastify.get('/paths/free', async () => {
+    const [rows] = await db.query(
+      "SELECT * FROM paths"
+    );
+    return rows;
+  });
 
+  // Display a path
+fastify.get('/path/:id', async (req) => {
+    const [rows] = await db.query('SELECT * FROM paths WHERE id = ?', [req.params.id]);
+    return rows[0];
+});
+
+  // Select a path
+fastify.post('/paths/select', async (req) => {
+    const date = new Date();
+    const { userId, pathId } = req.body;
+    const [existing] = await db.query(
+      'SELECT * FROM path_participants WHERE user_id = ? AND path_id = ?', [userId, pathId]
+    );
+
+    if (existing.length) return { message: 'Already joined this path.' };
+
+    await db.query('INSERT INTO path_participants (user_id, path_id, progress, joined_at) VALUES (?, ?, 0, ?)', [userId, pathId, date]);
+    return { message: 'Path selected.' };
+});
+
+  // Quit a path
+fastify.post('/path/quit', async (req) => {
+    const { userId, path_id } = req.body;
+    await db.query('DELETE FROM path_participants WHERE userId = ? AND path_id = ?', [userId, path_id]);
+    return { message: 'Path quit successfully.' };
+});
+
+  // Check if current step is completed and reward
+fastify.post('/paths/step/complete', async (req) => {
+    const { userId, pathId } = req.body;
+
+    const [[participant]] = await db.query(
+      'SELECT * FROM path_participants WHERE user_id = ? AND path_id = ?',
+      [userId, pathId]
+    );
+    if (!participant) return { error: 'Not participating in path.' };
+
+    const [[path]] = await db.query('SELECT * FROM paths WHERE id = ?', [pathId]);
+    const steps = JSON.parse(path.steps || '[]');
+    const rewards = JSON.parse(path.rewards || '[]');
+
+    const currentStep = steps[participant.progress];
+    if (!currentStep) return { message: 'All steps completed!' };
+
+    // Simulate completion
+    const nextProgress = participant.progress + 1;
+    await db.query('UPDATE path_participants SET progress = ? WHERE user_id = ? AND path_id = ?', [nextProgress, userId, pathId]);
+
+    const reward = rewards[nextProgress - 1];
+    return {
+      message: 'Step completed.',
+      rewardGiven: reward || {},
+      nextStep: steps[nextProgress] || null
+    };
+});
+
+  // Get active path and progress
+fastify.get('/path/participant/:userId', async (req) => {
+    const [rows] = await db.query(
+      `SELECT pp.*, p.name, p.steps, p.rewards
+       FROM path_participants pp
+       JOIN paths p ON pp.path_id = p.id
+       WHERE pp.userId = ?`,
+      [req.params.userId]
+    );
+
+    return rows.map(row => ({
+      ...row,
+      steps: JSON.parse(row.steps),
+      rewards: JSON.parse(row.rewards)
+    }));
+});
+
+// In your Fastify route file (e.g. routes/paths.js or routes/index.js)
+fastify.get('/paths/available', async (request, reply) => {
+    const { userId } = request.query;
   
+    if (!userId) {
+      return reply.status(400).send({ error: 'Missing userId in query' });
+    }
+  
+    try {
+      const [takenPaths] = await db.query(
+        `SELECT path_id FROM path_participants WHERE userId = ?`,
+        [userId]
+      );
+  
+      const takenPathIds = takenPaths.map(row => row.path_id);
+  
+      const placeholders = takenPathIds.map(() => '?').join(',');
+      const [availablePaths] = takenPathIds.length > 0
+        ? await db.query(
+            `SELECT * FROM paths WHERE id NOT IN (${placeholders})`,
+            takenPathIds
+          )
+        : await db.query(`SELECT * FROM paths`);
+  
+      reply.send(availablePaths);
+    } catch (err) {
+      console.error('Error fetching available paths:', err);
+      reply.status(500).send({ error: 'Failed to fetch available paths' });
+    }
+});
 
-
-
-
-
+fastify.get('/paths/active', async (request, reply) => {
+    const { userId } = request.query;
+  
+    if (!userId) {
+        return reply.status(400).send({ error: 'Missing userId in query' });
+    }
+  
+    try {
+        // Get all path_ids that the user is currently participating in
+        const [participantRows] = await db.query(
+            `SELECT * FROM path_participants WHERE user_id = ?`,
+            [userId]
+        );
+    
+        if (participantRows.length === 0) {
+            return reply.send([]); // No active paths
+        }
+    
+        const pathIds = participantRows.map(row => row.path_id);
+        const placeholders = pathIds.map(() => '?').join(',');
+    
+        // Get full path data for those paths
+        const [pathRows] = await db.query(
+            `SELECT * FROM paths WHERE id IN (${placeholders})`,
+            pathIds
+        );
+    
+        // Merge progress/resumeTime from participantRows into each path
+        const enrichedPaths = pathRows.map(path => {
+            const participant = participantRows.find(p => p.path_id === path.id);
+            return {
+            ...path,
+            progress: participant.progress,
+            completed_at: participant.completed_at,
+            resumeTime: participant.resumeTime,
+            };
+        });
+    
+        reply.send(enrichedPaths);
+    } catch (err) {
+      console.error('Error fetching active paths:', err);
+      reply.status(500).send({ error: 'Failed to fetch active paths' });
+    }
+});
+  
+  
 
 
 const start = async () => {
