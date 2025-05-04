@@ -110,7 +110,7 @@ fastify.post('/auth/signup', async (request, reply) => {
         if (existing.length > 0) {
             return reply.code(400).send({ message: 'Username already exists' });
         }
-
+ 
         // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10);
         const joinedAt = new Date().toISOString().slice(0, 10);
@@ -2678,6 +2678,7 @@ fastify.put('/tower-floor-update', async (request, reply) => {
 
             const monsterId = monsterRows[0].id;
 
+            // Attempt to update first
             const [updateResult] = await db.query(
                 `UPDATE tower_players
                 SET bossName = ?, remainingBossHealth = ?, floor = ?
@@ -2687,9 +2688,21 @@ fastify.put('/tower-floor-update', async (request, reply) => {
 
             if (updateResult.affectedRows > 0) {
                 return reply.code(200).send({ message: `Boss, health, and floor updated manually for userId: ${userId}` });
-            } else {
-                return reply.code(404).send({ error: "User not found during manual update" });
             }
+
+            // If no rows were affected (userId not found), insert a new one
+            const [insertResult] = await db.query(
+                `INSERT INTO tower_players (userId, bossName, remainingBossHealth, floor)
+                VALUES (?, ?, ?, ?)`,
+                [userId, bossName, bossHealth, monsterId]
+            );
+
+            if (insertResult.affectedRows > 0) {
+                return reply.code(201).send({ message: `New tower player created for userId: ${userId}` });
+            } else {
+                return reply.code(500).send({ error: "Failed to insert new tower player" });
+            }
+
         }
     } catch (error) {
         console.error("Failed to update tower floor:", error);
