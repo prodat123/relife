@@ -2745,7 +2745,7 @@ fastify.get('/tower-floor', async (request, reply) => {
 
 fastify.get('/tower-leaderboard', async (request, reply) => {
     try {
-        const [leaderboard] = await db.query('SELECT * FROM tower_leaderboard ORDER BY floor DESC');
+        const [leaderboard] = await db.query('SELECT * FROM tower_players ORDER BY floor DESC');
         reply.send(leaderboard);
     } catch (error) {
         console.error('Error fetching leaderboard:', error);
