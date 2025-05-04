@@ -432,7 +432,7 @@ const checkSpiritHealth = async () => {
                         newSpirit += 3;
                         await db.query('UPDATE users SET spiritHealth = ?, maxSpiritHealth = ? WHERE id = ?', [newSpirit, maxSpiritHealth, user.id]);
                     }
-                }
+                }   
             } else {
                 console.log(user.id + "NO QUEST");
                 // No quests completed
@@ -843,25 +843,21 @@ fastify.get('/quests/active', async (request, reply) => {
 
 // Fetch completed quests the user has participated in
 fastify.get('/quests/completed', async (request, reply) => {
-    const { userId } = request.query;
+    const { userId, date } = request.query;
   
     // Validate if the user ID is provided
-    if (!userId) {
+    if (!userId || !date) {
       return reply.code(400).send({ error: 'User ID is required' });
     }
   
-    try {
-      // Get the current date in 'YYYY-MM-DD' format
-      const currentDate = new Date().toISOString().slice(0, 10);
-      console.log('Current Date:', currentDate);
-  
+    try {  
       // Query to fetch completed quests for the given user where completed = true and completed_at is today
       const [completedQuests] = await db.query(
         `SELECT qp.quest_id, qp.progress, qp.completed, qp.joined_at, q.name, q.description, qp.completed_at 
          FROM quest_participants qp
          INNER JOIN quests q ON qp.quest_id = q.id
-         WHERE qp.user_id = ? AND qp.completed = 1 AND qp.completed_at = ?`,
-        [userId, currentDate]
+         WHERE qp.user_id = ? AND qp.completed_at = ?`,
+        [userId, date]
       );
   
       // Return the completed quests
@@ -873,16 +869,26 @@ fastify.get('/quests/completed', async (request, reply) => {
 });
 
 fastify.post('/quests/finish', async (request, reply) => {
-    const { questId, userId } = request.body;
+    const { questId, userId, date, currentDay } = request.body;
 
-    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
-    const currentDate = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
-    const formattedDate = new Date();
+    const now = new Date(date).toISOString().slice(0, 19).replace("T", " ");
+    // const currentDate = new Date(date).toISOString().slice(0, 10); // 'YYYY-MM-DD'
+    const formattedDate = new Date(date);
 
     try {
         const [userExists] = await db.query('SELECT id, guild FROM users WHERE id = ?', [userId]);
         if (userExists.length === 0) {
             return reply.code(400).send({ error: 'User does not exist' });
+        }
+
+        const [alreadyClaimedToday] = await db.query(
+            `SELECT completed_at FROM quest_participants
+             WHERE quest_id = ? AND user_id = ? AND completed_at = ?`,
+            [questId, userId, date]
+        );
+        
+        if (alreadyClaimedToday.length > 0) {
+            return reply.code(400).send({ error: 'Quest has already been claimed today' });
         }
 
         const guildName = userExists[0].guild;
@@ -898,60 +904,144 @@ fastify.post('/quests/finish', async (request, reply) => {
         }
 
         const [quest] = await db.query(
-            `SELECT name, experience_reward, item_reward, stat_reward, tags, type, period FROM quests WHERE id = ?`,
+            `SELECT name, experience_reward, item_reward, stat_reward, tags, type, period, difficulty FROM quests WHERE id = ?`,
             [questId]
         );
+
         if (quest.length === 0) {
             return reply.code(404).send({ error: 'Quest not found.' });
         }
 
-        const { name: questName, experience_reward: experienceReward, item_reward: itemReward, stat_reward: statReward, tags: questTags, type: questType, period } = quest[0];
+        // Update streak if not claimed today
+        const [streakData] = await db.query(
+            `SELECT days FROM scheduled_quests WHERE user_id = ? AND quest_id = ?`,
+            [userId, questId]
+        );
+        
+        
+        let days = [];
+        try {
+            days = JSON.parse(streakData[0]?.days || '[]');
+        } catch (err) {
+            console.error('Failed to parse days:', err);
+            days = [];
+        }
+        
+        const dayIndex = days.findIndex(d => d.day === currentDay);
+        let updatedDay;
+
+        if (dayIndex > -1) {
+            const existing = days[dayIndex];
+            const today = new Date(date);
+            const lastDate = new Date(existing.last_completed_date);
+
+            const diffTime = today.getTime() - lastDate.getTime();
+            const diffDays = diffTime / (1000 * 60 * 60 * 24);
+
+            if (existing.last_completed_date === date) {
+                // Already completed today, keep streak
+                updatedDay = existing;
+            } else if (diffDays <= 8 && diffDays >= 6) {
+                // Continued streak if last completion was 6-8 days ago
+                updatedDay = {
+                    ...existing,
+                    streak: existing.streak + 1,
+                    last_completed_date: date
+                };
+            } else {
+                // Streak reset
+                updatedDay = {
+                    ...existing,
+                    streak: 1,
+                    last_completed_date: date
+                };
+            }
+
+            days[dayIndex] = updatedDay;
+        } else {
+            // First time completing this day
+            updatedDay = {
+                day: currentDay,
+                streak: 1,
+                last_completed_date: date
+            };
+            days.push(updatedDay);
+        }
+
+        
+        await db.query(
+            `UPDATE scheduled_quests SET days = ? WHERE user_id = ? AND quest_id = ?`,
+            [JSON.stringify(days), userId, questId]
+        );
+        
+
+
+        const { name: questName, experience_reward: experienceReward, item_reward: itemReward, stat_reward: statReward, tags: questTags, type: questType, period, difficulty } = quest[0];
         const formattedTags = JSON.parse(questTags);
 
-        const [claimable] = await db.query(
-            `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ? AND expired_at < ?`,
-            [questId, userId, now]
+        // const [claimable] = await db.query(
+        //     `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ?`,
+        //     [questId, userId, now]
+        // );
+
+        const existingQuest = quest[0];
+
+        const [questParticipationRows] = await db.query(
+            `SELECT * FROM quest_participants WHERE quest_id = ? AND user_id = ?`,
+            [questId, userId]
         );
-
-        if (claimable.length === 0) {
-            return reply.code(400).send({ error: 'Quest is not ready to be claimed' });
-        }
-
-        const existingQuest = claimable[0];
+        
+        const activatedQuest = questParticipationRows[0];
 
         if (questType === 'journey') {
-            const currentPeriod = existingQuest.period_completed || 0;
-
-            if (currentPeriod + 1 >= period) {
-                // Final step, mark as completed
-                await db.query(
-                    `UPDATE quest_participants 
-                     SET completed = 1, completed_at = ?, progress = ? 
-                     WHERE id = ?`,
-                    [currentDate, 'Completed', existingQuest.id]
-                );
-            } else {
-                // Increment and continue journey
-                const newPeriod = currentPeriod + 1;
+            if (!activatedQuest) {
+                // Insert the journey quest if it doesn't exist
                 const newExpiredAt = new Date(formattedDate.getTime() + 24 * 60 * 60 * 1000); // +24h
-
                 await db.query(
-                    `UPDATE quest_participants 
-                     SET period_completed = ?, joined_at = ?, joined_at_datetime = ?, expired_at = ?, progress = ? 
-                     WHERE id = ?`,
-                    [newPeriod, now, formattedDate, newExpiredAt, 'Started', existingQuest.id]
+                    `INSERT INTO quest_participants 
+                     (quest_id, user_id, period_completed, joined_at, joined_at_datetime, completed_at, expired_at, progress, completed) 
+                     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0)`,
+                    [questId, userId, now, formattedDate, date, newExpiredAt, 'Started']
                 );
+                console.log("Inserted new journey quest for user.");
+            } else {
+                const currentPeriod = activatedQuest.period_completed || 0;
+                const newPeriodCompleted = currentPeriod + 1;
+                if (currentPeriod + 1 >= period) {
+                    await db.query(
+                        `DELETE FROM quest_participants 
+                         WHERE id = ?`,
+                        [activatedQuest.id]
+                    );
+
+                    await db.query(
+                        `DELETE FROM scheduled_quests 
+                         WHERE quest_id = ? AND user_id = ?`, // adjust column name if needed
+                        [activatedQuest.quest_id, userId]
+                    );
+                } else {
+                    // Increment and continue journey
+                    const newExpiredAt = new Date(formattedDate.getTime() + 24 * 60 * 60 * 1000); // +24h
+        
+                    await db.query(
+                        `UPDATE quest_participants 
+                         SET period_completed = ?, completed_at = ?, joined_at = ?, joined_at_datetime = ?, expired_at = ?, progress = ? 
+                         WHERE id = ?`,
+                        [newPeriodCompleted, date, now, formattedDate, newExpiredAt, 'Started', activatedQuest.id]
+                    );
+                }
             }
         } else {
-            // Mark as completed for normal quests
             await db.query(
-                `UPDATE quest_participants
-                 SET completed = 1, completed_at = ?
-                 WHERE quest_id = ? AND user_id = ?`,
-                [currentDate, questId, userId]
+                `INSERT INTO quest_participants (quest_id, user_id, completed, completed_at)
+                 VALUES (?, ?, 1, ?)
+                 ON DUPLICATE KEY UPDATE
+                   completed = 1,
+                   completed_at = VALUES(completed_at)`,
+                [questId, userId, date]
             );
-
         }
+        
 
         let boostedExperienceReward = experienceReward + xpBoost;
 
@@ -986,9 +1076,8 @@ fastify.post('/quests/finish', async (request, reply) => {
             }
         
             // If journey, divide and round up stat reward
-            const currentPeriod = existingQuest.period_completed;
-            console.log("Current period: " + currentPeriod);
-            console.log("Total period: " + period);
+            const currentPeriod = existingQuest.period_completed || 0;
+            
             // console.log("current period:" + currentPeriod);
             // console.log("total period:" + period);
             if (questType === 'journey') {
@@ -1049,7 +1138,7 @@ fastify.post('/quests/finish', async (request, reply) => {
                     requirement.questNames.includes(completedQuestName)
                 ) {
                     contributes = true;
-                    console.log("THIS IS TRUE - name");
+                    console.log("THIS CONTRIBUTES - Name");
                 }
             
                 // Check if any tag from this quest matches required
@@ -1058,7 +1147,7 @@ fastify.post('/quests/finish', async (request, reply) => {
                     completedQuestTags.some(tag => requirement.questTags.includes(tag))
                 ) {
                     contributes = true;
-                    console.log("THIS IS TRUE - tags");
+                    console.log("THIS CONTRIBUTES - Tags");
                 }
             
                 // Check if any updated stat matches required stat condition
@@ -1067,23 +1156,25 @@ fastify.post('/quests/finish', async (request, reply) => {
                     Object.keys(updatedStats).some(stat => requirement.questStats.includes(stat))
                 ) {
                     contributes = true;
-                    console.log("THIS IS TRUE - stats");
+                    console.log("THIS CONTRIBUTES - Stats");
                 }
             
                 if (contributes) {
                     // Get joined_at for this path
                     const [[{ joined_at }]] = await db.query(
-                      `SELECT joined_at FROM path_participants WHERE user_id = ? AND path_id = ?`,
-                      [userId, path.id] // path.pathId should be the actual path reference in user_paths
+                        `SELECT joined_at FROM path_participants WHERE user_id = ? AND path_id = ?`,
+                        [userId, path.id]
                     );
-                  
+                      
                     const [participantQuests] = await db.query(
-                      `SELECT qp.quest_id, qp.joined_at_datetime, q.name, q.tags, q.stat_reward
-                       FROM quest_participants qp
-                       JOIN quests q ON qp.quest_id = q.id
-                       WHERE qp.user_id = ? AND qp.joined_at_datetime > ?`,
-                      [userId, joined_at]
+                        `SELECT qp.quest_id, qp.completed_at, q.name, q.tags, q.stat_reward
+                         FROM quest_participants qp
+                         JOIN quests q ON qp.quest_id = q.id
+                         WHERE qp.user_id = ?
+                           AND STR_TO_DATE(qp.completed_at, '%Y-%m-%d') >= STR_TO_DATE(?, '%Y-%m-%d')`,
+                        [userId, joined_at]
                     );
+                      
                   
                     const completedQuestNames = participantQuests.map(q => q.name);
                     const completedTags = [
@@ -1123,18 +1214,19 @@ fastify.post('/quests/finish', async (request, reply) => {
                       !requirement.numOfQuests || totalMatchingQuests >= requirement.numOfQuests;
                   
                     if (
-                      hasRequiredTags &&
-                      hasRequiredQuests &&
-                      hasRequiredStats &&
+                      (hasRequiredTags ||
+                      hasRequiredQuests ||
+                      hasRequiredStats ) &&
                       meetsNumRequirement
                     ) {
-                      const isFinalStep = progress + 1 >= steps.length;
-                      await db.query(
-                        `UPDATE path_participants 
-                         SET progress = ?, completed_at = ?
-                         WHERE path_id = ? AND user_id = ?`,
-                        [progress + 1, isFinalStep ? new Date() : null, path.id, userId]
-                      );
+                        console.log("Update the progress");
+                        const isFinalStep = progress + 1 >= steps.length;
+                        await db.query(
+                            `UPDATE path_participants 
+                            SET progress = ?, completed_at = ?
+                            WHERE path_id = ? AND user_id = ?`,
+                            [progress + 1, isFinalStep ? new Date() : null, path.id, userId]
+                        );
                     }
                 }
                   
@@ -1148,7 +1240,10 @@ fastify.post('/quests/finish', async (request, reply) => {
         reply.send({ 
             success: true, 
             message: 'Quest marked as finished and rewards applied.', 
-            statsIncreased: statRewardThisPeriod || {}
+            statsIncreased: statRewardThisPeriod || {},
+            streak: updatedDay.streak,
+            experienceReward: experienceReward,
+            difficulty: difficulty
         });
 
     } catch (err) {
@@ -1157,117 +1252,177 @@ fastify.post('/quests/finish', async (request, reply) => {
     }
 });
 
+
 fastify.post('/schedule-quest', async (request, reply) => {
     console.log("Incoming body:", request.body);
-  
+
     const { quest_id, user_id, days } = request.body;
-  
+
     if (!quest_id || !user_id || !Array.isArray(days)) {
-        return reply.code(400).send({ error: 'Missing quest_id, user_id, or days' });
+        return reply.code(400).send({ error: 'Missing or invalid quest_id, user_id, or days' });
     }
-  
+
+    // ✅ Normalize to array of objects: [{ day: "Monday", streak: 0, last_completed_date: null }, ...]
+    const normalizedDays = days
+        .map(day => {
+            if (typeof day === 'string') {
+                return {
+                    day,
+                    streak: 0,
+                    last_completed_date: null
+                };
+            } else if (typeof day === 'object' && day !== null && day.day) {
+                return {
+                    day: day.day,
+                    streak: day.streak ?? 0,
+                    last_completed_date: day.last_completed_date ?? null
+                };
+            }
+            return null;
+        })
+        .filter(Boolean); // remove nulls
+
     try {
         const [existing] = await db.query(
             `SELECT * FROM scheduled_quests WHERE quest_id = ? AND user_id = ?`,
             [quest_id, user_id]
         );
-    
-        // 🌟 Step 1: Fetch all scheduled quests for this user
+
+        // 🧠 Step 1: Fetch all scheduled quests for this user
         const [allScheduled] = await db.query(
             `SELECT days FROM scheduled_quests WHERE user_id = ?`,
             [user_id]
         );
-    
-        // 🌟 Step 2: Build a count of how many quests are scheduled per day
+
+        // 🧠 Step 2: Count how many quests are scheduled per day
         const dayCounts = {};
         for (const row of allScheduled) {
             const userDays = JSON.parse(row.days || '[]');
-            for (const day of userDays) {
-            dayCounts[day] = (dayCounts[day] || 0) + 1;
+            for (const entry of userDays) {
+                if (entry && entry.day) {
+                    dayCounts[entry.day] = (dayCounts[entry.day] || 0) + 1;
+                }
             }
         }
-    
-        // 🌟 Step 3: If this quest already exists, subtract its current days from the count
+
+        // 🧠 Step 3: Subtract current quest's days if updating
         if (existing.length > 0) {
             const currentDays = JSON.parse(existing[0].days || '[]');
-            for (const day of currentDays) {
-            dayCounts[day] = (dayCounts[day] || 0) - 1;
+            for (const entry of currentDays) {
+                if (entry && entry.day) {
+                    dayCounts[entry.day] = (dayCounts[entry.day] || 0) - 1;
+                }
             }
         }
-    
-        // 🌟 Step 4: Check if adding new days would exceed the limit
-        const exceeded = days.some(day => (dayCounts[day] || 0) + 1 > 3);
-        if (exceeded) {
-            return reply.code(400).send({
-            success: false,
-            error: 'You can only schedule up to 3 quests per day.'
-            });
-        }
-    
-        // 🌟 Step 5: Proceed with normal logic
+
+        // Step 4: Optional - daily limit
+        // const exceeded = normalizedDays.some(entry => (dayCounts[entry.day] || 0) + 1 > 3);
+        // if (exceeded) {
+        //     return reply.code(400).send({
+        //         success: false,
+        //         error: 'You can only schedule up to 3 quests per day.'
+        //     });
+        // }
+
+        const activeDayCount = normalizedDays.length;
+
+        // Step 5: Insert / update / delete
         if (existing.length > 0) {
-            if (days.length === 0) {
-            await db.query(
-                `DELETE FROM scheduled_quests WHERE quest_id = ? AND user_id = ?`,
-                [quest_id, user_id]
-            );
-            return reply.send({ success: true, message: 'Quest unscheduled (deleted)' });
+            if (activeDayCount === 0) {
+                await db.query(
+                    `DELETE FROM scheduled_quests WHERE quest_id = ? AND user_id = ?`,
+                    [quest_id, user_id]
+                );
+                return reply.send({ success: true, message: 'Quest unscheduled (deleted)' });
             } else {
-            const daysString = JSON.stringify(days);
-            await db.query(
-                `UPDATE scheduled_quests SET days = ? WHERE quest_id = ? AND user_id = ?`,
-                [daysString, quest_id, user_id]
-            );
-            return reply.send({ success: true, message: 'Quest days updated successfully' });
+                await db.query(
+                    `UPDATE scheduled_quests SET days = ? WHERE quest_id = ? AND user_id = ?`,
+                    [JSON.stringify(normalizedDays), quest_id, user_id]
+                );
+                return reply.send({ success: true, message: 'Quest days updated successfully' });
             }
         } else {
-            if (days.length === 0) {
-            return reply.send({ success: true, message: 'No action taken (empty days)' });
+            if (activeDayCount === 0) {
+                return reply.send({ success: true, message: 'No action taken (empty days)' });
             } else {
-            const daysString = JSON.stringify(days);
-            await db.query(
-                `INSERT INTO scheduled_quests (quest_id, user_id, days) VALUES (?, ?, ?)`,
-                [quest_id, user_id, daysString]
-            );
-            return reply.send({ success: true, message: 'Quest scheduled successfully' });
+                await db.query(
+                    `INSERT INTO scheduled_quests (quest_id, user_id, days) VALUES (?, ?, ?)`,
+                    [quest_id, user_id, JSON.stringify(normalizedDays)]
+                );
+                return reply.send({ success: true, message: 'Quest scheduled successfully' });
             }
         }
-  
+
     } catch (err) {
-      console.error(err);
-      reply.code(500).send({ error: 'Internal Server Error' });
+        console.error(err);
+        reply.code(500).send({ error: 'Internal Server Error' });
     }
 });
 
+
+
 fastify.get('/scheduled-quests/:userId', async (request, reply) => {
     try {
-        const { userId } = request.params;  // Access `userId` from route parameters
+        const { userId } = request.params;
+
         const query = `
-            SELECT q.*, sq.days
+            SELECT q.*, sq.days, sq.quest_id, qp.period_completed, qp.user_id AS participant_id
             FROM quests q
             LEFT JOIN scheduled_quests sq ON q.id = sq.quest_id
+            LEFT JOIN quest_participants qp ON q.id = qp.quest_id AND qp.user_id = ?
             WHERE sq.user_id = ?
         `;
-        
-        const [result] = await db.query(query, [userId]);
-    
-        if (result.length === 0) {
+
+        const [rows] = await db.query(query, [userId, userId]);
+
+        if (rows.length === 0) {
             return reply.code(404).send({ message: 'No scheduled quests found for this user' });
         }
-    
-        // Parse the `days` column if it exists (it's stored as a stringified array)
-        result.forEach(quest => {
-            if (quest.days) {
-            quest.days = JSON.parse(quest.days);  // Convert the JSON string back to an array
+
+        const questsMap = new Map();
+
+        for (const row of rows) {
+            const questId = row.id;
+
+            if (!questsMap.has(questId)) {
+                questsMap.set(questId, {
+                    ...row,
+                    days: row.days ? JSON.parse(row.days) : [],
+                    stat_reward: row.stat_reward ? JSON.parse(row.stat_reward) : {},
+                    participants: row.participant_id
+                        ? [{ user_id: row.participant_id, streak: row.streak }]
+                        : [],
+                });
+            } else {
+                const quest = questsMap.get(questId);
+                if (row.participant_id) {
+                    const alreadyExists = quest.participants.some(p => p.user_id === row.participant_id);
+                    if (!alreadyExists) {
+                        quest.participants.push({ user_id: row.participant_id, streak: row.streak });
+                    }
+                }
             }
+        }
+
+        const result = Array.from(questsMap.values()).map(quest => {
+            // Ensure all `days` entries are { day: ..., streak: ... }
+            quest.days = quest.days.map(dayEntry => {
+                if (typeof dayEntry === 'string') {
+                    return { day: dayEntry, streak: 0 }; // fallback if not updated yet
+                }
+                return dayEntry;
+            });
+            return quest;
         });
-    
+
         reply.send(result);
     } catch (error) {
         console.error('Error fetching scheduled quests:', error);
         reply.code(500).send({ message: 'Internal Server Error' });
     }
 });
+
+
 
 fastify.post('/scheduled-quests/remove', async (request, reply) => {
     const { questId, userId, dayToRemove } = request.body;
@@ -1277,6 +1432,7 @@ fastify.post('/scheduled-quests/remove', async (request, reply) => {
     }
 
     try {
+        // Fetch the existing scheduled quest
         const [existingScheduledQuest] = await db.query(
             'SELECT * FROM scheduled_quests WHERE quest_id = ? AND user_id = ?',
             [questId, userId]
@@ -1286,18 +1442,21 @@ fastify.post('/scheduled-quests/remove', async (request, reply) => {
             return reply.code(400).send({ error: 'You have not selected this quest' });
         }
 
+        // Parse the existing days array from the database (JSON string to JavaScript array)
         const existingDays = JSON.parse(existingScheduledQuest[0].days || '[]');
-        const updatedDays = existingDays.filter(day => day !== dayToRemove);
 
+        // Filter out the dayToRemove based on the 'day' field of the objects
+        const updatedDays = existingDays.filter(item => item.day !== dayToRemove);
+
+        // If no days are left, we delete the quest entirely
         if (updatedDays.length === 0) {
-            // Optional: delete the row if no days are left
             await db.query(
                 'DELETE FROM scheduled_quests WHERE quest_id = ? AND user_id = ?',
                 [questId, userId]
             );
             return reply.code(200).send({ message: 'Quest removed completely because no days left' });
         } else {
-            // Update the days column with the new array
+            // Otherwise, update the days column with the new array (after removal)
             await db.query(
                 'UPDATE scheduled_quests SET days = ? WHERE quest_id = ? AND user_id = ?',
                 [JSON.stringify(updatedDays), questId, userId]
@@ -1310,6 +1469,7 @@ fastify.post('/scheduled-quests/remove', async (request, reply) => {
         return reply.code(500).send({ error: 'An error occurred while updating the scheduled quest' });
     }
 });
+
 
   
   
@@ -1345,55 +1505,56 @@ fastify.get('/account', async (request, reply) => {
     const { userId } = request.query;
   
     if (!userId) {
-      return reply.code(400).send({ error: 'User ID is required' });
+        return reply.code(400).send({ error: 'User ID is required' });
     }
   
     try {
-      // Fetch the user's account data
-      const [userResults] = await db.query(
-        'SELECT * FROM users WHERE id = ?',
-        [userId]
-      );
-  
-      if (userResults.length === 0) {
-        return reply.code(404).send({ error: 'User not found' });
-      }
-  
-      const user = userResults[0];
-  
-      // Parse inventory from the user's data (stored as a JSON string)
-      const inventoryItems = user.inventory ? JSON.parse(user.inventory) : [];
-  
-      // Provide default placeholders for missing slots based on the inventory directly
-      const equipment = {
-        head: user.head && inventoryItems.find(item => item.id === String(user.head)) || { id: '', name: 'None', type: 'head' },
-        torso: user.torso && inventoryItems.find(item => item.id === String(user.torso)) || { id: '', name: 'None', type: 'torso' },
-        legs: user.legs && inventoryItems.find(item => item.id === String(user.legs)) || { id: '', name: 'None', type: 'legs' },
-        feet: user.feet && inventoryItems.find(item => item.id === String(user.feet)) || { id: '', name: 'None', type: 'feet' },
-        weapon: user.weapon && inventoryItems.find(item => item.id === String(user.weapon)) || { id: '', name: 'None', type: 'weapon' },
-      };
-  
-      // Send the response with user data, inventory, and equipment
-      return reply.code(200).send({
-        username: user.username,
-        experience: user.experience,
-        stats: JSON.parse(user.stats || '{}'),
-        equipment,
-        inventory: inventoryItems,
-        currency: user.currency,
-        discount: user.discount,
-        last_spin: user.last_spin,
-        spells: user.spells,
-        ownedSpells: user.ownedSpells,
-        badges: user.badges,
-        perks: user.perks,
-        perkPoints: user.perkPoints,
-        claimedMilestones: user.claimedMilestones,
-        guild: user.guild,
-        questTags: user.questTags,
-        spiritHealth: user.spiritHealth,
-        maxSpiritHealth: user.maxSpiritHealth,
-      });
+        // Fetch the user's account data
+        const [userResults] = await db.query(
+            'SELECT * FROM users WHERE id = ?',
+            [userId]
+        );
+    
+        if (userResults.length === 0) {
+            return reply.code(404).send({ error: 'User not found' });
+        }
+    
+        const user = userResults[0];
+    
+        // Parse inventory from the user's data (stored as a JSON string)
+        const inventoryItems = user.inventory ? JSON.parse(user.inventory) : [];
+    
+        // Provide default placeholders for missing slots based on the inventory directly
+        const equipment = {
+            head: user.head && inventoryItems.find(item => item.id === String(user.head)) || { id: '', name: 'None', type: 'head' },
+            torso: user.torso && inventoryItems.find(item => item.id === String(user.torso)) || { id: '', name: 'None', type: 'torso' },
+            legs: user.legs && inventoryItems.find(item => item.id === String(user.legs)) || { id: '', name: 'None', type: 'legs' },
+            feet: user.feet && inventoryItems.find(item => item.id === String(user.feet)) || { id: '', name: 'None', type: 'feet' },
+            weapon: user.weapon && inventoryItems.find(item => item.id === String(user.weapon)) || { id: '', name: 'None', type: 'weapon' },
+        };
+    
+        // Send the response with user data, inventory, and equipment
+        return reply.code(200).send({
+            username: user.username,
+            experience: user.experience,
+            stats: JSON.parse(user.stats || '{}'),
+            equipment,
+            inventory: inventoryItems,
+            currency: user.currency,
+            discount: user.discount,
+            last_spin: user.last_spin,
+            spells: user.spells,
+            ownedSpells: user.ownedSpells,
+            badges: user.badges,
+            perks: user.perks,
+            perkPoints: user.perkPoints,
+            claimedMilestones: user.claimedMilestones,
+            guild: user.guild,
+            questTags: user.questTags,
+            spiritHealth: user.spiritHealth,
+            maxSpiritHealth: user.maxSpiritHealth,
+            unlockedFloors: user.unlockedFloors,
+        });
   
     } catch (error) {
       console.error('Error fetching account data:', error.message);
@@ -1403,17 +1564,17 @@ fastify.get('/account', async (request, reply) => {
   
 
 fastify.get('/monster', async (request, reply) => {
-    const { monsterName } = request.query;
+    const { id } = request.query;
 
-    if (!monsterName) {
+    if (!id) {
         return reply.code(400).send({ error: 'Monster name is required' });
     }
 
     try {
         // Fetch the user's account data
         const [monsterResults] = await db.query(
-            'SELECT * FROM monsters WHERE name = ?',
-            [monsterName]
+            'SELECT * FROM monsters WHERE id = ?',
+            [id]
         );
 
         if (monsterResults.length === 0) {
@@ -1435,27 +1596,45 @@ fastify.get('/monster', async (request, reply) => {
 
 fastify.get('/allMonsters', async (request, reply) => {
     try {
-        // Fetch the user's account data
-        const [monsterResults] = await db.query(
-            'SELECT * FROM monsters'
-        );
+        const [monsterResults] = await db.query('SELECT * FROM monsters');
 
         if (monsterResults.length === 0) {
-            return reply.code(404).send({ error: 'Monster not found' });
+            return reply.code(404).send({ error: 'No monsters found' });
         }
 
-        // const monsterResult = monsterResults[0];
+        // Process each monster
+        const monstersWithLoot = await Promise.all(monsterResults.map(async (monster) => {
+            let lootItemIds = [];
 
-        // Log the equipment data for debugging
-        // console.log("Mapped Equipment Data:", equipment);
+            try {
+                lootItemIds = JSON.parse(monster.loot || '[]');
+            } catch (e) {
+                lootItemIds = [];
+            }
 
-        // Send the response with user data, inventory, and equipment
-        reply.code(200).send(monsterResults);
+            let lootItems = [];
+
+            if (lootItemIds.length > 0) {
+                const [items] = await db.query(
+                    `SELECT * FROM items WHERE id IN (?)`,
+                    [lootItemIds]
+                );
+                lootItems = items;
+            }
+
+            return {
+                ...monster,
+                loot: lootItems  // replace IDs with actual item data
+            };
+        }));
+
+        reply.code(200).send(monstersWithLoot);
     } catch (error) {
         console.error('Error fetching monster data:', error.message);
         reply.code(500).send({ error: 'Failed to fetch monster data' });
     }
 });
+
 
 
 // Store rate limits in memory
@@ -2292,31 +2471,235 @@ fastify.post('/tower-restart', async (request, reply) => {
     }
 });
 
-fastify.put('/tower-floor-update', async (request, reply) => {
-    const { userId, floor } = request.body;
+const rarities = [
+    { rarity: "peasantly", weight: 100 },
+    { rarity: "artisan", weight: 20 },
+    { rarity: "knightly", weight: 5 },
+    { rarity: "noble", weight: 1 },
+    { rarity: "kingly", weight: 0.2 },
+    { rarity: "emperor", weight: 0.01 },
+];
 
-    if (!userId || floor === undefined) {
-        return reply.code(400).send({ error: "ID and floor are required" });
+function getRandomRarity() {
+    const totalWeight = rarities.reduce((sum, r) => sum + r.weight, 0);
+    const randomNum = Math.random() * totalWeight;
+
+    let cumulativeWeight = 0;
+    for (const rarity of rarities) {
+        cumulativeWeight += rarity.weight;
+        if (randomNum <= cumulativeWeight) {
+            return rarity.rarity;
+        }
     }
+}
 
-    const query = `
-        UPDATE tower_players
-        SET floor = ?
-        WHERE userId = ?;
-    `;
+fastify.put('/tower-floor-update', async (request, reply) => {
+    const { userId, bossName, bossHealth } = request.body;
+
+    
+
+    if (!userId || bossName === undefined || bossHealth === undefined) {
+        return reply.code(400).send({ error: "ID, bossName, and bossHealth are required" });
+    }
 
     try {
-        const [result] = await db.query(query, [floor, userId]);
+        if (bossHealth <= 0) {
+            const [monsterResult] = await db.query(
+                `SELECT loot FROM monsters WHERE name = ?`,
+                [bossName]
+            );
+            
+            if (monsterResult.length === 0) {
+                return reply.code(404).send({ error: "Boss not found for loot drop." });
+            }
+            
+            let lootItemIds = [];
+            
+            try {
+                lootItemIds = JSON.parse(monsterResult[0].loot || '[]');
+            } catch (e) {
+                return reply.code(500).send({ error: "Invalid loot format for monster." });
+            }
+            
+            if (lootItemIds.length === 0) {
+                return reply.code(200).send({ message: "Boss defeated! But this one dropped no loot." });
+            }
+            
+            const droppedItems = [];
+            
+            for (let i = 0; i < 3; i++) {
+                const desiredRarity = getRandomRarity();
+            
+                const [lootItems] = await db.query(
+                    `SELECT * FROM items WHERE id IN (?) AND rarity = ?`,
+                    [lootItemIds, desiredRarity]
+                );
+            
+                let itemToGive;
+            
+                if (lootItems.length > 0) {
+                    itemToGive = lootItems[Math.floor(Math.random() * lootItems.length)];
+                } else {
+                    const [allLootItems] = await db.query(
+                        `SELECT * FROM items WHERE id IN (?)`,
+                        [lootItemIds]
+                    );
+                    if (allLootItems.length === 0) continue; // skip if still no items
+                    itemToGive = allLootItems[Math.floor(Math.random() * allLootItems.length)];
+                }
+            
+                const itemStats = JSON.parse(itemToGive.stats || '{}');
+                const newItem = {
+                    ...itemToGive,
+                    stats: itemStats,
+                    id: uuidv4()
+                };
+            
+                droppedItems.push(newItem);
+            }
+            
+            // Fetch user details
+            const [user] = await db.query(
+                `SELECT currency, inventory FROM users WHERE id = ?`,
+                [userId]
+            );
+            
+            if (user.length === 0) {
+                return reply.code(404).send({ error: 'User not found.' });
+            }
+            
+            let { inventory } = user[0];
+            inventory = JSON.parse(inventory || '[]');
+            
+            inventory.push(...droppedItems);
+            
+            await db.query(
+                `UPDATE users SET inventory = ? WHERE id = ?`,
+                [JSON.stringify(inventory), userId]
+            );
 
-        if (result.affectedRows > 0) {
-            reply.code(200).send({ message: `Floor updated successfully for userId: ${userId}` });
-        } 
+            // Boss defeated: Increase floor
+            const [floorResult] = await db.query(
+                `UPDATE tower_players
+                SET floor = floor + 1
+                WHERE userId = ?`,
+                [userId]
+            );
 
+            if (floorResult.affectedRows > 0) {
+                const [playerRows] = await db.query(
+                    `SELECT floor FROM tower_players WHERE userId = ?`,
+                    [userId]
+                );
+
+                if (playerRows.length === 0) {
+                    return reply.code(404).send({ error: "User not found after floor update" });
+                }
+
+                const newFloor = playerRows[0].floor;
+
+                // Fetch new boss based on floor
+                const [monsterRows] = await db.query(
+                    `SELECT name, health FROM monsters WHERE id = ?`,
+                    [newFloor]
+                );
+
+                if (monsterRows.length === 0) {
+                    return reply.code(404).send({ error: `No monster found for floor ${newFloor}` });
+                }
+
+                const newBoss = monsterRows[0];
+
+                // Update tower_players with new boss info
+                await db.query(
+                    `UPDATE tower_players
+                    SET bossName = ?, remainingBossHealth = ?
+                    WHERE userId = ?`,
+                    [newBoss.name, newBoss.health, userId]
+                );
+
+                // Unlock defeated and next boss
+                const [userRows] = await db.query(
+                    `SELECT unlockedFloors FROM users WHERE id = ?`,
+                    [userId]
+                );
+
+                let unlockedFloors = [];
+
+                if (userRows.length > 0 && userRows[0].unlockedFloors) {
+                    try {
+                        unlockedFloors = JSON.parse(userRows[0].unlockedFloors);
+                    } catch (err) {
+                        console.error('Failed to parse unlockedFloors:', err);
+                    }
+                }
+
+                // Add defeated boss (if not already unlocked)
+                if (!unlockedFloors.includes(bossName)) {
+                    unlockedFloors.push(bossName);
+                }
+
+                // Add the new boss (if not already unlocked)
+                if (!unlockedFloors.includes(newBoss.name)) {
+                    unlockedFloors.push(newBoss.name);
+                }
+
+                await db.query(
+                    `UPDATE users SET unlockedFloors = ? WHERE id = ?`,
+                    [JSON.stringify(unlockedFloors), userId]
+                );
+
+                return reply.code(200).send({ 
+                    message: `Boss defeated! Moved to floor ${newFloor} with new boss ${newBoss.name}.`,
+                    newBoss: newBoss,
+                    items: droppedItems.map(item => ({
+                        id: item.id,
+                        name: item.name,
+                        image: item.image_url,
+                        rarity: item.rarity,
+                        stats: item.stats
+                    }))
+                });
+
+            } else {
+                return reply.code(404).send({ error: "User not found during floor increment" });
+            }
+
+        } else {
+            // Boss is still alive: manual update bossName, bossHealth, and floor
+            const [monsterRows] = await db.query(
+                `SELECT id FROM monsters WHERE name = ?`,
+                [bossName]
+            );
+
+            if (monsterRows.length === 0) {
+                return reply.code(404).send({ error: `No monster found with name ${bossName}` });
+            }
+
+            const monsterId = monsterRows[0].id;
+
+            const [updateResult] = await db.query(
+                `UPDATE tower_players
+                SET bossName = ?, remainingBossHealth = ?, floor = ?
+                WHERE userId = ?`,
+                [bossName, bossHealth, monsterId, userId]
+            );
+
+            if (updateResult.affectedRows > 0) {
+                return reply.code(200).send({ message: `Boss, health, and floor updated manually for userId: ${userId}` });
+            } else {
+                return reply.code(404).send({ error: "User not found during manual update" });
+            }
+        }
     } catch (error) {
-        console.error("Failed to update floor:", error);
-        reply.code(500).send({ error: "Failed to update floor" });
+        console.error("Failed to update tower floor:", error);
+        return reply.code(500).send({ error: "Server error while updating tower floor" });
     }
 });
+
+
+
+
 
 fastify.get('/tower-floor', async (request, reply) => {
     let { userId } = request.query;  // Accessing the userId from the query string
@@ -2327,7 +2710,7 @@ fastify.get('/tower-floor', async (request, reply) => {
     }
 
     const query = `
-        SELECT floor, numberOfRuns FROM tower_players
+        SELECT bossName, remainingBossHealth, floor FROM tower_players
         WHERE userId = ?;
     `;
 
@@ -2335,11 +2718,11 @@ fastify.get('/tower-floor', async (request, reply) => {
         const [rows] = await db.query(query, [parseInt(userId, 10)]);
 
         if (rows.length === 0) {
-            return reply.code(200).send({ floor: 0, numOfRuns: 0 });
+            return reply.code(200).send({ bossName: '', remainingBossHealth: 0, floor: 0 });
             // return reply.code(404).send({ message: 'Player not found.' });
         }
 
-        return reply.code(200).send({ floor: rows[0].floor, numOfRuns: rows[0].numberOfRuns });
+        return reply.code(200).send({ bossName: rows[0].bossName, remainingBossHealth: rows[0].remainingBossHealth, floor: rows[0].floor });
     } catch (error) {
         console.error('Error in tower-floor:', error);
         return reply.code(500).send({ error: 'Internal server error.' });
@@ -3336,6 +3719,64 @@ fastify.post('/craft', async (request, reply) => {
     }
 });
 
+fastify.post('/scrap', async (request, reply) => {
+    const { userId, itemId } = request.body;
+  
+    try {
+        // Step 1: Get user inventory
+        const [users] = await db.query(`SELECT inventory FROM users WHERE id = ?`, [userId]);
+        if (users.length === 0) return reply.code(404).send({ error: 'User not found' });
+    
+        let inventory = JSON.parse(users[0].inventory);
+    
+        // Step 2: Find item by id
+        const itemToScrap = inventory.find(item => item.id === itemId);
+        if (!itemToScrap) return reply.code(400).send({ error: 'Item not found in inventory' });
+    
+        // Step 3: Get item data from items table
+        const [items] = await db.query(`SELECT * FROM items WHERE name = ?`, [itemToScrap.name]);
+        if (items.length === 0) return reply.code(400).send({ error: 'Item not found in items table' });
+    
+        const itemData = items[0];
+    
+        // Step 4: Remove the item being scrapped
+        inventory = inventory.filter(item => item.id !== itemId);
+    
+        const scrapName = `${itemData.rarity} Scrap`;
+    
+        // Step 5: Check if scrap item already exists
+        const existingScrap = inventory.find(
+            item => item.name === scrapName && item.type === 'material'
+        );
+    
+        if (existingScrap) {
+            existingScrap.quantity = (existingScrap.quantity || 1) + 1;
+        } else {
+            // Step 6: Create new scrap item
+            const scrapItem = {
+            id: uuidv4(),
+            name: scrapName,
+            type: 'material',
+            description: `A piece of scrap from a ${itemData.rarity.toLowerCase()} item.`,
+            image_url: `/sprites/materials/${itemData.rarity.toLowerCase()}_scrap.png`,
+            levelRequired: 1,
+            quantity: 1
+            };
+    
+            inventory.push(scrapItem);
+        }
+    
+        // Step 7: Save updated inventory
+        await db.query(`UPDATE users SET inventory = ? WHERE id = ?`, [JSON.stringify(inventory), userId]);
+    
+        return reply.send({ success: true, scrap: scrapName });
+    } catch (error) {
+        console.error('Error scrapping item:', error);
+        return reply.code(500).send({ error: 'Internal server error' });
+    }
+});
+  
+
 fastify.post('/consume', async (request, reply) => {
     const { userId, itemId, quantity } = request.body;
 
@@ -4322,10 +4763,19 @@ fastify.get('/path/:id', async (req) => {
 
   // Select a path
 fastify.post('/paths/select', async (req) => {
-    const date = new Date();
-    const { userId, pathId } = req.body;
+    const { userId, pathId, date } = req.body;
+    
+    console.log(date);
+
+    const [alreadyInPath] = await db.query(
+        'SELECT * FROM path_participants WHERE user_id = ?', [userId]
+    );
+
+    if (alreadyInPath.length) return { message: 'You can only join one path.' };
+
+
     const [existing] = await db.query(
-      'SELECT * FROM path_participants WHERE user_id = ? AND path_id = ?', [userId, pathId]
+        'SELECT * FROM path_participants WHERE user_id = ? AND path_id = ?', [userId, pathId]
     );
 
     if (existing.length) return { message: 'Already joined this path.' };
@@ -4335,9 +4785,9 @@ fastify.post('/paths/select', async (req) => {
 });
 
   // Quit a path
-fastify.post('/path/quit', async (req) => {
-    const { userId, path_id } = req.body;
-    await db.query('DELETE FROM path_participants WHERE userId = ? AND path_id = ?', [userId, path_id]);
+fastify.post('/path/remove', async (req) => {
+    const { userId, pathId } = req.body;
+    await db.query('DELETE FROM path_participants WHERE user_id = ? AND path_id = ?', [userId, pathId]);
     return { message: 'Path quit successfully.' };
 });
 
