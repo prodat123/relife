@@ -2666,6 +2666,11 @@ fastify.put('/tower-floor-update', async (request, reply) => {
             }
 
         } else {
+            const [user] = await db.query(
+                `SELECT username FROM users WHERE id = ?`,
+                [userId]
+            );
+
             // Boss is still alive: manual update bossName, bossHealth, and floor
             const [monsterRows] = await db.query(
                 `SELECT id FROM monsters WHERE name = ?`,
@@ -2692,9 +2697,9 @@ fastify.put('/tower-floor-update', async (request, reply) => {
 
             // If no rows were affected (userId not found), insert a new one
             const [insertResult] = await db.query(
-                `INSERT INTO tower_players (userId, bossName, remainingBossHealth, floor)
-                VALUES (?, ?, ?, ?)`,
-                [userId, bossName, bossHealth, monsterId]
+                `INSERT INTO tower_players (userId, bossName, remainingBossHealth, floor, username)
+                VALUES (?, ?, ?, ?, ?)`,
+                [userId, bossName, bossHealth, monsterId, user[0].username]
             );
 
             if (insertResult.affectedRows > 0) {
