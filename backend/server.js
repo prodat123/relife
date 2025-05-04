@@ -118,7 +118,7 @@ fastify.post('/auth/signup', async (request, reply) => {
         // Insert the user
         await db.query(
             'INSERT INTO users (username, email, age, password, experience, stats, joined_at, head, torso, legs, feet) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [username, email, age, hashedPassword, 0, defaultStats, joinedAt, '', '', '', '']
+            [username, email, age, hashedPassword, 1, defaultStats, joinedAt, '', '', '', '']
         );
 
         // Fetch the newly inserted user
