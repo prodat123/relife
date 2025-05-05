@@ -1376,7 +1376,7 @@ fastify.get('/scheduled-quests/:userId', async (request, reply) => {
         const [rows] = await db.query(query, [userId, userId]);
 
         if (rows.length === 0) {
-            return reply.code(404).send({ message: 'No scheduled quests found for this user' });
+            return reply.send({ message: 'No scheduled quests found for this user' });
         }
 
         const questsMap = new Map();
@@ -2714,9 +2714,6 @@ fastify.put('/tower-floor-update', async (request, reply) => {
         return reply.code(500).send({ error: "Server error while updating tower floor" });
     }
 });
-
-
-
 
 
 fastify.get('/tower-floor', async (request, reply) => {
