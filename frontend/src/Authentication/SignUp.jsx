@@ -98,6 +98,7 @@ const SignUp = () => {
     };
 
     const handleRecaptchaChange = (token) => {
+        //alert("Received reCAPTCHA token: " + token);
         setRecaptchaToken(token); // Store the reCAPTCHA token
     };
     
@@ -195,8 +196,8 @@ const SignUp = () => {
 
                 <ReCAPTCHA
                     className='mt-4'
-                    sitekey={process.env.REACT_APP_SECRET_CAPTCHA_KEY}
-                    onChange={(token) => setRecaptchaToken(token)}
+                    sitekey={process.env.REACT_APP_RECAPTCHA_SITE_KEY}
+                    onChange={(token) => handleRecaptchaChange(token)}
                 />
                 </div>
 

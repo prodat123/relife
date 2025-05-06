@@ -8,7 +8,10 @@ const db = require('./db'); // Import the database connection
 const cors = require('@fastify/cors');
 const bcrypt = require('bcryptjs');
 const cron = require('node-cron');
+const axios = require('axios');
 const { v4: uuidv4 } = require('uuid'); // Import uuid to generate unique ids
+const { errorCodes } = require('fastify');
+const { RecaptchaEnterpriseServiceClient } = require('@google-cloud/recaptcha-enterprise');
 
 require('dotenv').config();
 
@@ -101,7 +104,34 @@ fastify.post('/auth/signup', async (request, reply) => {
     });
 
     if (!recaptchaToken || recaptchaToken.length < 40) {
-        return reply.code(400).send({ message: 'reCAPTCHA token is missing' });
+        return reply.code(400).send({ message: 'Missing or invalid reCAPTCHA token' });
+    }
+    
+    try {
+        const qs = new URLSearchParams();
+        qs.append('secret', process.env.RECAPTCHA_SECRET_KEY);
+        qs.append('response', recaptchaToken);
+        
+        const response = await axios.post(
+            'https://www.google.com/recaptcha/api/siteverify',
+            qs.toString(),
+            {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+            }
+        );
+        
+        if (!response.data.success) {
+            // console.error(process.env.RECAPTCHA_SECRET_KEY);
+            // console.error(recaptchaToken);
+            // console.error(response.data["error-codes"]);
+            return reply.code(400).send({ message: 'Failed reCAPTCHA verification' });
+            
+        }
+    } catch (error) {
+        console.error('reCAPTCHA verification error:', error);
+        return reply.code(500).send({ message: 'Error verifying reCAPTCHA' });
     }
 
     try {
