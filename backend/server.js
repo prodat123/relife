@@ -616,12 +616,12 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 
-cron.schedule('59 23 * * *', async () => {
-    await checkSpiritHealth();
-}, {
-    scheduled: true,
-    timezone: "UTC"
-});
+// cron.schedule('59 23 * * *', async () => {
+//     await checkSpiritHealth();
+// }, {
+//     scheduled: true,
+//     timezone: "UTC"
+// });
 
   
 
