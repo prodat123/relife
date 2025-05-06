@@ -108,12 +108,20 @@ fastify.post('/auth/signup', async (request, reply) => {
     }
     
     try {
-        const response = await axios.post('https://www.google.com/recaptcha/api/siteverify', {
-                secret: process.env.RECAPTCHA_SECRET_KEY,
-                response: recaptchaToken
+        const qs = new URLSearchParams();
+        qs.append('secret', process.env.RECAPTCHA_SECRET_KEY);
+        qs.append('response', recaptchaToken);
+        
+        const response = await axios.post(
+            'https://www.google.com/recaptcha/api/siteverify',
+            qs.toString(),
+            {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
             }
         );
-    
+        
         if (!response.data.success) {
             // console.error(process.env.RECAPTCHA_SECRET_KEY);
             // console.error(recaptchaToken);
