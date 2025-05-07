@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import config from '../config';
@@ -15,7 +15,7 @@ const SignUp = () => {
     const [message, setMessage] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [recaptchaToken, setRecaptchaToken] = useState('');
-
+    const recaptchaRef = useRef(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -28,7 +28,9 @@ const SignUp = () => {
 
     const handleSignup = async (e) => {
         e.preventDefault();
- 
+
+        recaptchaRef.current.reset();
+        
         const usernameRegex = /^[a-zA-Z0-9_]+$/;
 
         if (username.trim() === '' || password.trim() === '') {
@@ -198,6 +200,7 @@ const SignUp = () => {
                     className='mt-4'
                     sitekey={process.env.REACT_APP_RECAPTCHA_SITE_KEY}
                     onChange={(token) => handleRecaptchaChange(token)}
+                    ref={recaptchaRef}
                 />
                 </div>
 
