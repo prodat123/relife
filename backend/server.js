@@ -3734,6 +3734,74 @@ fastify.post('/craft', async (request, reply) => {
     }
 });
 
+fastify.post('/craft-scrapbox', async (request, reply) => {
+    const { userId, scrapboxId, quantity } = request.body;
+
+    try {
+        // 1. Fetch scrapbox details
+        const [scrapboxRows] = await db.query(
+            `SELECT * FROM scrapboxes WHERE id = ?`,
+            [scrapboxId]
+        );
+
+        if (scrapboxRows.length === 0) {
+            return reply.code(404).send({ error: "Scrapbox not found" });
+        }
+
+        const scrapbox = scrapboxRows[0];
+        const totalCost = scrapbox.scrap_cost * quantity;
+        const requiredScrapName = `${scrapbox.rarity.toLowerCase()} scrap`; // e.g., 'Peasant' => 'peasant scrap'
+
+        // 2. Fetch user inventory
+        const [userRows] = await db.query(`SELECT inventory FROM users WHERE id = ?`, [userId]);
+        if (userRows.length === 0) {
+            return reply.code(404).send({ error: "User not found" });
+        }
+
+        let inventory = JSON.parse(userRows[0].inventory || '[]');
+
+        // 3. Check if user has enough matching-rarity scrap
+        const scrapItem = inventory.find(item => 
+            item.name.toLowerCase() === requiredScrapName && item.type === 'material'
+        );
+
+        if (!scrapItem || scrapItem.quantity < totalCost) {
+            return reply.code(400).send({ error: `Not enough ${requiredScrapName} to craft ${scrapbox.name}` });
+        }
+
+        // 4. Deduct the scrap
+        scrapItem.quantity -= totalCost;
+
+        // 5. Add the scrapbox to inventory
+        const existingBox = inventory.find(item => item.name === scrapbox.name && item.type === 'scrapbox');
+
+        if (existingBox) {
+            existingBox.quantity += quantity;
+        } else {
+            inventory.push({
+                name: scrapbox.name,
+                type: 'scrapbox',
+                quantity,
+                stats: {
+                    loot_table: JSON.parse(scrapbox.loot_table),
+                    rarity: scrapbox.rarity
+                }
+            });
+        }
+
+        // 6. Save inventory
+        await db.query(`UPDATE users SET inventory = ? WHERE id = ?`, [JSON.stringify(inventory), userId]);
+
+        reply.send({ message: `Successfully crafted ${quantity} ${scrapbox.name}` });
+
+    } catch (err) {
+        console.error(err);
+        reply.code(500).send({ error: "Failed to craft scrapbox" });
+    }
+});
+
+
+
 fastify.post('/scrap', async (request, reply) => {
     const { userId, itemId } = request.body;
   
