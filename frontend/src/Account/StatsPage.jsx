@@ -285,7 +285,7 @@ const StatsPage = () => {
               </div>
 
               <div className="text-center bg-green-700 text-white py-2 px-4 rounded shadow-md">
-                🎉 <strong>Great job!</strong> Your highest stat gain in the last {daysRange} days is{" "}
+                <strong>Great job!</strong> Your highest stat gain in the last {daysRange} days is{" "}
                 <span className="underline font-bold">{highestStat[0]}</span> with a total of{" "}
                 <span className="font-bold">{highestStat[1]}</span> points!
               </div>

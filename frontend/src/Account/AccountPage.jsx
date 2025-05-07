@@ -3,7 +3,7 @@ import axios from "axios";
 import LevelProgressBar from "./LevelProgressBar";
 import { useParams } from "react-router-dom";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faAngleLeft, faAngleRight, faArrowRight, faBrain, faCertificate, faDumbbell, faFire, faFireAlt, faHandFist, faHeart, faRunning } from '@fortawesome/free-solid-svg-icons';
+import { faAngleLeft, faAngleRight, faArrowRight, faBrain, faCertificate, faDiamond, faDumbbell, faFire, faFireAlt, faHandFist, faHeart, faMedal, faRunning } from '@fortawesome/free-solid-svg-icons';
 import config from "../config";
 
 const AccountPage = ({ id }) => {
@@ -28,89 +28,30 @@ const AccountPage = ({ id }) => {
 
     const isOwner = id == userId;
 
+    
     const ranks = [
-        {
-            levelRequirement: "1-10",
-            rank: "F-" 
-        },
-        {
-            levelRequirement: "11-20",
-            rank: "F" 
-        },
-        {
-            levelRequirement: "21-30",
-            rank: "F+" 
-        },
-        {
-            levelRequirement: "31-40",
-            rank: "D-" 
-        },
-        {
-            levelRequirement: "41-50",
-            rank: "D" 
-        },
-        {
-            levelRequirement: "51-60",
-            rank: "D+" 
-        },
-        {
-            levelRequirement: "61-70",
-            rank: "C-" 
-        },
-        {
-            levelRequirement: "71-80",
-            rank: "C" 
-        },
-        {
-            levelRequirement: "81-90",
-            rank: "C+" 
-        },
-        {
-            levelRequirement: "91-100",
-            rank: "B-" 
-        },
-        {
-            levelRequirement: "101-110",
-            rank: "B" 
-        },
-        {
-            levelRequirement: "111-120",
-            rank: "B+" 
-        },
-        {
-            levelRequirement: "121-130",
-            rank: "A-" 
-        },
-        {
-            levelRequirement: "131-140",
-            rank: "A" 
-        },
-        {
-            levelRequirement: "141-150",
-            rank: "A+" 
-        },
-        {
-            levelRequirement: "151-175",
-            rank: "S-" 
-        },
-        {
-            levelRequirement: "176-200",
-            rank: "S" 
-        },
-        {
-            levelRequirement: "201-250",
-            rank: "S+" 
-        },
-        {
-            levelRequirement: "251-300",
-            rank: "S++" 
-        },
-        {
-            levelRequirement: "301-400",
-            rank: "Z" 
-        },
-
-    ]
+        { levelRequirement: 1, rank: "F-", color: "text-green-500", description: "Beginner – just getting started." },
+        { levelRequirement: 11, rank: "F", color: "text-lime-500", description: "Novice explorer of features." },
+        { levelRequirement: 21, rank: "F+", color: "text-emerald-500", description: "Starting to stand out!" },
+        { levelRequirement: 31, rank: "D-", color: "text-teal-500", description: "Basic engagement level." },
+        { levelRequirement: 41, rank: "D", color: "text-cyan-500", description: "Slightly more active." },
+        { levelRequirement: 51, rank: "D+", color: "text-sky-500", description: "Gaining traction." },
+        { levelRequirement: 61, rank: "C-", color: "text-blue-500", description: "Improved consistency." },
+        { levelRequirement: 71, rank: "C", color: "text-indigo-500", description: "Intermediate level user." },
+        { levelRequirement: 81, rank: "C+", color: "text-violet-500", description: "Reliable contributor." },
+        { levelRequirement: 91, rank: "B-", color: "text-purple-500", description: "Notable activity." },
+        { levelRequirement: 101, rank: "B", color: "text-fuchsia-500", description: "Advanced and consistent." },
+        { levelRequirement: 111, rank: "B+", color: "text-pink-500", description: "Power user potential." },
+        { levelRequirement: 121, rank: "A-", color: "text-rose-500", description: "Highly engaged." },
+        { levelRequirement: 131, rank: "A", color: "text-orange-500", description: "Elite tier user." },
+        { levelRequirement: 141, rank: "A+", color: "text-amber-500", description: "Influencer status." },
+        { levelRequirement: 151, rank: "S-", color: "text-red-500", description: "Expert level." },
+        { levelRequirement: 176, rank: "S", color: "text-red-600", description: "Mastered the system." },
+        { levelRequirement: 201, rank: "S+", color: "text-red-700", description: "Legendary contributor." },
+        { levelRequirement: 251, rank: "S++", color: "text-red-800", description: "Top 1% performer." },
+        { levelRequirement: 301, rank: "Z", color: "text-black", description: "Mythic status – beyond mastery." }
+    ];
+      
 
     const fetchAccountData = async () => {
         try {
@@ -342,6 +283,25 @@ const AccountPage = ({ id }) => {
     }
 
     
+    function calculateLevel(experience) {
+        let level = 1;
+        let xpForNextLevel = 100;
+
+        while (experience >= xpForNextLevel) {
+            level++;
+            experience -= xpForNextLevel;
+            xpForNextLevel = 100 * Math.pow(1.05, (level - 1));
+        }
+
+        return { level, remainingXP: experience, xpForNextLevel };
+    }
+
+      
+    const currentLevel = calculateLevel(experience)?.level;
+
+    // Find the latest rank where levelRequirement is <= currentLevel
+    const currentRank = ranks.findLast(rank => currentLevel >= rank.levelRequirement) || ranks[0];
+
 
     return (
         <div className="w-full text-white grid 2xl:grid-cols-6 lg:grid-cols-5 md:grid-cols-3 grid-cols-1 gap-4 min-h-screen h-full p-4">
@@ -363,7 +323,7 @@ const AccountPage = ({ id }) => {
             {/* Main Content */}
             <div className="w-full grid lg:grid-cols-4 md:grid-cols-1 grid-cols-1 lg:col-span-4 md:col-span-4 w-full lg:col-start-2 md:col-start-2 gap-2 col-span-5">
 
-                <div className="lg:col-span-2 md:col-span-2 flex-1 relative rounded-lg shadow-md bg-gray-700">
+                <div className="lg:col-span-2 md:col-span-2 flex-1 relative rounded-lg shadow-md bg-gray-800">
 
 
                     <div className="lg:px-6 py-6 px-6">
@@ -371,28 +331,27 @@ const AccountPage = ({ id }) => {
 
                         <LevelProgressBar experience={experience} />
 
-                        <div className="grid lg:grid-cols-2 grid-cols-1">
-                            <ul className="stats space-y-2">
-                                {Object.entries(stats).map(([key, value]) => {
-                                    const statColors = {
-                                        strength: "text-red-500",
-                                        bravery: "text-blue-500",
-                                        intelligence: "text-yellow-500",
-                                        endurance: "text-green-500",
-                                    };
-                                    
-                                    const statIcons = {
-                                        strength: faDumbbell,
-                                        bravery: faRunning,
-                                        intelligence: faBrain,
-                                        endurance: faHeart,
-                                    }
-                                    const colorClass = statColors[key] || "text-gray-400";
-                                    const statIcon = statIcons[key] || "";
-                                    return (
-                                        <li key={key} className="flex justify-between items-center py-2">
-                                            <div className="flex items-center space-x-4">
-                                            
+                        <div className="grid lg:grid-cols-2 grid-cols-1 gap-4">
+                            {Object.entries(stats).map(([key, value]) => {
+                                const statColors = {
+                                    strength: "text-red-500",
+                                    bravery: "text-blue-500",
+                                    intelligence: "text-yellow-500",
+                                    endurance: "text-green-500",
+                                };
+                                
+                                const statIcons = {
+                                    strength: faDumbbell,
+                                    bravery: faRunning,
+                                    intelligence: faBrain,
+                                    endurance: faHeart,
+                                }
+                                const colorClass = statColors[key] || "text-gray-400";
+                                const statIcon = statIcons[key] || "";
+                                return (
+                                    <div key={key} className="flex justify-between items-center py-2">
+                                        <div className="flex items-center space-x-4">
+                                        
                                             <FontAwesomeIcon icon={statIcon} className={`w-12 h-12 object-contain z-50 ${colorClass}`}/>
                                             {/* Text container */}
                                             <div className="flex flex-col">
@@ -401,35 +360,30 @@ const AccountPage = ({ id }) => {
                                                 </span>
                                                 <span className={`${colorClass} text-5xl font-bold z-50`}>{value}</span>
                                             </div>
-                                            </div>
+                                        </div>
 
-                                        </li>
+                                    </div>
 
-                                    );
-                                })}
-                            </ul>
+                                );
+                            })}
 
-                            <div className="relative flex flex-col items-center justify-center">
-                                {/* Outer aura */}
+                            {/* <div className="relative flex flex-col items-center justify-center">
                                 <div className="absolute w-[280px] h-[280px] rounded-full bg-cyan-300 opacity-20 blur-3xl z-0"></div>
 
-                                {/* Inner glow */}
                                 <div className="absolute w-[220px] h-[220px] rounded-full bg-cyan-500 opacity-30 blur-xl z-0"></div>
 
-                                {/* Flame */}
                                 <FontAwesomeIcon 
                                     icon={faFireAlt} 
                                     style={{ fontSize: 200 }} 
                                     className="text-cyan-300 drop-shadow-lg z-10" 
                                 /> 
 
-                                {/* HUD-style Spirit Health display */}
                                 <div className="text-cyan-300 text-xl z-20">
                                     <p className="text-3xl font-bold">{accountData.spiritHealth}/{accountData.maxSpiritHealth}</p>
                                 </div>
                                 <p className="italic text-sm text-center">"{selectedQuote}"</p>
 
-                            </div>
+                            </div> */}
 
 
 
@@ -444,10 +398,15 @@ const AccountPage = ({ id }) => {
                 <div className="relative order-first flex-1 lg:col-span-2 md:col-span-2  flex flex-col justify-center items-center h-full rounded-lg shadow-md bg-indigo-600">
                     {/* <img src={"/sprites/UI/Character frame.png"} className="w-full h-full absolute pixel-art" /> */}
                     <div className="absolute top-0 right-0 m-4">
-                        <div className='flex items-center justify-center'>
-                            <FontAwesomeIcon className='text-5xl text-yellow-400' icon={faCertificate} />
-                            <div className='absolute text-xl text-indigo-600 font-bold'>{calculateRank(calculateLevel(accountData.experience).level)}</div>
-                        </div>
+                        <span className={`
+                            fa-layers fa-fw rounded-full font-bold uppercase tracking-wider text-5xl mb-3`}>
+                                <FontAwesomeIcon
+                                    icon={faDiamond}
+                                    className={`${currentRank.color}`}
+                                />
+
+                            <span className="fa-layers-text font-extrabold text-white" data-fa-transform="shrink-8">{currentRank.rank}</span>
+                        </span>
                     </div>
                     {/* Player Sprite */}
                     <div className="character-sprite relative w-3/4">
@@ -629,26 +588,90 @@ const AccountPage = ({ id }) => {
 
                 </div> */}
 
-                <div className="lg:col-span-4 md:col-span-2 flex-1 relative rounded-lg shadow-md bg-gray-700 p-6">
-                    <h1 className="text-4xl text-center font-bold">RANK PROGRESSION</h1>
-                    <div className="flex flex-col gap-2 mt-2">
-                    {ranks.map((rank) => {
-                        return(
-                            <div className="flex justify-between bg-gray-600 p-4 rounded-md items-center">
-                                
-                                <div className="text-lg">Level {rank.levelRequirement}</div>
+                <div className="p-6 col-span-1 lg:col-span-4 bg-gray-800 rounded-lg shadow-lg">
+                    <h1 className="text-3xl font-bold text-center text-yellow-400 mb-6"><FontAwesomeIcon icon={faMedal} /> RANK PROGRESSION</h1>
 
-                                <FontAwesomeIcon icon={faArrowRight} />
+                    <div className="flex gap-4 overflow-x-auto pb-2">
+                        {ranks.map((rank, index) => {
+                        const currentLevel = calculateLevel(experience)?.level;
+                        console.log(currentLevel);
+                        const isAchieved = currentLevel >= rank.levelRequirement;
+                        const isCurrent =
+                            currentLevel < rank.levelRequirement &&
+                            (index === 0 || currentLevel >= ranks[index - 1].levelRequirement);
 
-                                <div className="flex items-center justify-center">
-                                    <FontAwesomeIcon className="text-4xl text-yellow-400" icon={faCertificate} />
-                                    <div className="text-lg absolute text-indigo-600 font-bold">{rank.rank}</div>
-                                </div>
+                        const progressPercent = isCurrent
+                            ? Math.min((currentLevel / rank.levelRequirement) * 100, 100)
+                            : isAchieved
+                            ? 100
+                            : 0;
+
+                        return (
+                            <div
+                            key={index}
+                            className={`min-w-[200px] bg-gray-700 p-4 rounded-xl shadow-md flex flex-col justify-between border-l-4
+                                ${
+                                isAchieved
+                                    ? 'border-yellow-400'
+                                    : isCurrent
+                                    ? 'border-yellow-300'
+                                    : 'border-gray-500'
+                                }`}
+                            >
+                                <span className={`
+                                    fa-layers fa-fw rounded-full font-bold uppercase tracking-wider text-3xl mb-3`}>
+                                        <FontAwesomeIcon
+                                            icon={faDiamond}
+                                            className={`${rank.color}`}
+                                            
+                                        />
+        
+                                    <span className="fa-layers-text font-extrabold text-white" data-fa-transform="shrink-8">{rank.rank}</span>
+                                </span>
+                            {/* <div className="flex items-center gap-2 mb-2">
+                                <FontAwesomeIcon
+                                icon={faDiamond}
+                                className={`text-xl ${
+                                    isAchieved ? `${rank.color}` : isCurrent ? 'text-yellow-300' : 'text-gray-400'
+                                }`}
+                                />
+                                <span
+                                className={`font-bold text-lg ${
+                                    isAchieved || isCurrent ? 'text-white' : 'text-gray-400'
+                                }`}
+                                >
+                                {rank.rank}
+                                </span>
+                            </div> */}
+
+                            <div className="text-sm text-gray-300 mb-1">Unlocks at Level {rank.levelRequirement}</div>
+
+                            <p className="text-xs italic text-gray-400 mb-3">{rank.description}</p>
+
+                            <div className="w-full h-2 bg-gray-600 rounded overflow-hidden">
+                                <div
+                                className={`h-full ${
+                                    isAchieved
+                                    ? 'bg-yellow-400'
+                                    : isCurrent
+                                    ? 'bg-yellow-300 animate-pulse'
+                                    : 'bg-gray-500'
+                                }`}
+                                style={{ width: `${progressPercent}%` }}
+                                ></div>
                             </div>
-                        )
-                    })}
+
+                            <div className="text-right text-xs text-gray-400 mt-1">
+                                {progressPercent.toFixed(0)}%
+                            </div>
+                            </div>
+                        );
+                        })}
                     </div>
                 </div>
+
+
+
                 
 
             </div>

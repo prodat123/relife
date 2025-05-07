@@ -135,11 +135,11 @@ const BossSelectionModal = () => {
                          
                         <FontAwesomeIcon icon={faDungeon} className='text-indigo-400 text-4xl'/> 
                         <div>
-                            <h2 className="text-2xl font-extrabold text-white">{currentBoss.name}</h2>
-                            <p className="text-md text-red-600">{'<Floor ' + currentBoss.id + '>'}</p>
+                            <h2 className="text-xl lg:text-2xl font-extrabold text-white">{currentBoss.name}</h2>
+                            <p className="text-sm font-bold text-red-600">{'<Floor ' + currentBoss.id + '>'}</p>
                             {/* Hint to click */}
                             <div className="z-10">
-                                <p className="text-yellow-400 font-bold text-xs">Tap to Change</p>
+                                <p className="text-yellow-400 text-xs">Tap to Change</p>
                             </div>
                             
                         </div>
@@ -162,7 +162,7 @@ const BossSelectionModal = () => {
 
 
 
-                    <div className="flex flex-wrap gap-2 mt-2">
+                    <div className="flex flex-wrap gap-2 lg:m-0 mt-2">
                         {/* Weaknesses */}
                         {currentBoss !== "" && JSON.parse(currentBoss?.weaknesses)?.map((weakness, idx) => (
                             <div

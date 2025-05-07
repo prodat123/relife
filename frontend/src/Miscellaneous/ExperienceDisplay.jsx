@@ -30,7 +30,7 @@ const ExperienceDisplay = () => {
     }
 
     return (
-        <div className="hidden md:flex relative lg:w-[250px] md:w-[150px] px-2">
+        <div className="hidden md:flex relative lg:w-[250px] md:w-[150px]">
             <div className="relative lg:w-[250px] md:w-[150px] h-8">
                 {/* Progress Bar Overlay */}
                 <div className="absolute top-0 left-0 lg:w-[250px] md:w-[150px] h-full flex items-center lg:px-2 md:pr-4 z-10">

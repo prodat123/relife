@@ -59,6 +59,7 @@ const QuestDashboard = () => {
     const [questsOnPath, setQuestsOnPath] = useState([]);
     const [habitResponse, setHabitResponse] = useState(null);
     const [updatedScheduledQuests, setUpdatedScheduledQuests] = useState(false);
+    const [scheduledDays, setSchdeuledDays] = useState({});
 
     const dropdownRef = useRef();
     const bottomRef = useRef(null);
@@ -317,77 +318,77 @@ const QuestDashboard = () => {
     //     fetchPaths();
     // }, []);
 
-    const handleQuestSelection = async (questId) => {
-        if (completedQuests.includes(questId)) {
-            alert('This quest has already been completed and cannot be re-selected.');
-            return;
-        }
+    // const handleQuestSelection = async (questId) => {
+    //     if (completedQuests.includes(questId)) {
+    //         alert('This quest has already been completed and cannot be re-selected.');
+    //         return;
+    //     }
 
 
-        if (selectedQuests.includes(questId)) {
-            setQuestLoadingId(questId);
-            setQuestLoading(true);
+    //     if (selectedQuests.includes(questId)) {
+    //         setQuestLoadingId(questId);
+    //         setQuestLoading(true);
     
-            await axios.post(`${config.backendUrl}/quests/remove`, { 
-                questId, 
-                userId })
-                .then(() => {
-                    setSelectedQuests((prev) => prev.filter((id) => id !== questId))
-                })
-                .catch((error) => {
-                    console.error('Error removing quest:', error);
-                    alert(`Failed to remove quest: ${error.response?.data?.error || 'Unknown error'}`);
-                });
+    //         await axios.post(`${config.backendUrl}/quests/remove`, { 
+    //             questId, 
+    //             userId })
+    //             .then(() => {
+    //                 setSelectedQuests((prev) => prev.filter((id) => id !== questId))
+    //             })
+    //             .catch((error) => {
+    //                 console.error('Error removing quest:', error);
+    //                 alert(`Failed to remove quest: ${error.response?.data?.error || 'Unknown error'}`);
+    //             });
 
-            setActiveQuests((prev) => prev.filter((quest) => quest.id !== questId));
-            setQuestLoading(false);
-            setQuestLoadingId(null);
-        } else {
-            if (activeQuests.length >= (4 + extraSlots)) {
-                setPopups((prevPopups) => [
-                    ...prevPopups,
-                    { 
-                        id: Date.now(), 
-                        name: "Your quest slots are full!", 
-                        message: "You filled up all your quest slots, wait for the remaining time to select another quest.", 
-                        success: false 
-                    }
-                ]);
-                return; // Stop execution to prevent unnecessary state update
-            }
+    //         setActiveQuests((prev) => prev.filter((quest) => quest.id !== questId));
+    //         setQuestLoading(false);
+    //         setQuestLoadingId(null);
+    //     } else {
+    //         if (activeQuests.length >= (4 + extraSlots)) {
+    //             setPopups((prevPopups) => [
+    //                 ...prevPopups,
+    //                 { 
+    //                     id: Date.now(), 
+    //                     name: "Your quest slots are full!", 
+    //                     message: "You filled up all your quest slots, wait for the remaining time to select another quest.", 
+    //                     success: false 
+    //                 }
+    //             ]);
+    //             return; // Stop execution to prevent unnecessary state update
+    //         }
 
 
 
-            try {
-                // Quest not selected, so select it
-                setSelectedQuests((prev) => [...prev, questId]);
+    //         try {
+    //             // Quest not selected, so select it
+    //             setSelectedQuests((prev) => [...prev, questId]);
 
                 
-                const response = await axios.post(
-                    `${config.backendUrl}/quests/select`, 
-                    { userId, questId }, 
-                );
+    //             const response = await axios.post(
+    //                 `${config.backendUrl}/quests/select`, 
+    //                 { userId, questId }, 
+    //             );
 
-                // setSelectedQuests((prev) => [...prev, questId]);
+    //             // setSelectedQuests((prev) => [...prev, questId]);
     
-                // If successful, add the quest to activeQuests
-                const quest = quests.find((q) => q.id === questId);
-                if (quest) {
-                    // setQuestLoading(false);
-                    setQuestListUpdated((prev) => !prev); // Toggle flag to trigger fetching
-                    setActiveQuests((prev) => [...prev, { id: questId, ...quest }]);
-                    // setQuestLoadingId(null);
-                }
+    //             // If successful, add the quest to activeQuests
+    //             const quest = quests.find((q) => q.id === questId);
+    //             if (quest) {
+    //                 // setQuestLoading(false);
+    //                 setQuestListUpdated((prev) => !prev); // Toggle flag to trigger fetching
+    //                 setActiveQuests((prev) => [...prev, { id: questId, ...quest }]);
+    //                 // setQuestLoadingId(null);
+    //             }
 
     
-            } catch (error) {
-                console.error('Error selecting quest:', error);
-                alert(`Failed to select quest: ${error.response?.data?.error || 'Unknown error'}`);
-                // fetchActiveAndCompletedQuests();
+    //         } catch (error) {
+    //             console.error('Error selecting quest:', error);
+    //             alert(`Failed to select quest: ${error.response?.data?.error || 'Unknown error'}`);
+    //             // fetchActiveAndCompletedQuests();
                 
-            }
-        }
-    }
+    //         }
+    //     }
+    // }
 
 
     const toggleTag = (tag) => {
@@ -497,7 +498,7 @@ const QuestDashboard = () => {
             <div className="col-span-5 lg:col-start-2 md:col-start-2 col-span-1 p-4">
                 <BossSelectionModal />
                 <h1 className='text-3xl font-bold'><FontAwesomeIcon icon={faCalendarAlt} /> Scheduled Quests</h1>
-                <ScheduledQuests updated={updatedScheduledQuests} updateDashboard={updateScheduledQuests}/>
+                <ScheduledQuests onScheduledDays={setSchdeuledDays} updated={updatedScheduledQuests} updateDashboard={updateScheduledQuests}/>
             </div>
 
             <div className="lg:block hidden min-h-screen text-white p-6 col-span-1 lg:col-span-4 lg:col-start-2">
@@ -768,7 +769,7 @@ const QuestDashboard = () => {
                                         </div>
 
                                         <div>
-                                            <DaySelector questId={quest.id} updateScheduledQuests={updateScheduledQuests}/>
+                                            <DaySelector questId={quest.id} scheduledDays={scheduledDays} updateScheduledQuests={updateScheduledQuests}/>
                                         </div>
                                     </div>
                                 </li>
@@ -893,8 +894,7 @@ const QuestDashboard = () => {
                                 <option value="">All</option>
                                 {[...Array(maxDifficulty)].map((_, i) => (
                                     <option key={i + 1} value={i + 1}>
-                                        
-                                        {i + 1} Stars
+                                        Rank {getDifficultyGrade(i + 1)}
                                     </option>
                                 ))}
                             </select>
@@ -1078,7 +1078,7 @@ const QuestDashboard = () => {
                                             </div>
 
                                             <div>
-                                                <DaySelector questId={quest.id} updateScheduledQuests={updateScheduledQuests}/>
+                                                <DaySelector questId={quest.id} scheduledDays={scheduledDays} updateScheduledQuests={updateScheduledQuests}/>
                                             </div>
                                         </div>
                                     </li>

@@ -5,6 +5,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import CraftingSystem from './CraftingSystem';
 import { Shield, Sword, HardHat, Boot, Pants, StretchVertical, Footprints } from 'lucide-react';
 import { faArrowRight, faCog, faHelmetSafety, faPerson, faShield, faTrash } from '@fortawesome/free-solid-svg-icons';
+import ScrapboxOpener from './ScrapboxOpener';
 
 function Inventory() {
     const userId = JSON.parse(localStorage.getItem('user'))?.id;
@@ -382,6 +383,10 @@ function Inventory() {
                 </div> */}
                 {/* <CraftingSystem inventory={inventory} updateInventory={fetchAccountData}/> */}
 
+                <ScrapboxOpener
+                    scrapboxName="Refined Peasantly Scrapbox"
+                    lootTable={{ artisan: 50, knight: 10, noble: 1 }}
+                />
                 <div className='mt-4'>
                     <h3 className='text-2xl text-center text-white font-bold mb-3'>Rarities</h3>
                     <div className='flex items-center gap-3 flex-wrap justify-center'>
@@ -428,6 +433,7 @@ function Inventory() {
                     >Emperor</div>
                     </div>
                 </div>
+
                 <h1 className='text-3xl w-full font-bold text-center text-white mt-4 mb-2'>Owned Items</h1>
                 {inventory.length === 0 && <div className="text-center text-white">You have no items right now.</div>}
 

@@ -1,4 +1,4 @@
-import { faBroadcastTower, faTowerCell, faTowerObservation, faLock, faCoins, faPerson, faUser, faQuestionCircle, faExclamation, faScroll, faHandshake, faTrophy, faShoppingCart, faBox, faChartLine, faLineChart, faDungeon, faBlog, faHandPaper, faPen, faGlasses, faBagShopping, faSuitcase, faMagic, faWandMagic, faWandSparkles, faWandMagicSparkles, faI, faIcicles, faInfoCircle, faSprout, faGem, faCogs, faBoxes, faCircle, faCircleNodes, faCheckCircle, faFlag, faFireAlt, faChessRook, faMedal, faAward, faCertificate, faRoad, faCodeBranch, faArrowUpRightDots, faDiamond } from '@fortawesome/free-solid-svg-icons';
+import { faBroadcastTower, faTowerCell, faTowerObservation, faLock, faCoins, faPerson, faUser, faQuestionCircle, faExclamation, faScroll, faHandshake, faTrophy, faShoppingCart, faBox, faChartLine, faLineChart, faDungeon, faBlog, faHandPaper, faPen, faGlasses, faBagShopping, faSuitcase, faMagic, faWandMagic, faWandSparkles, faWandMagicSparkles, faI, faIcicles, faInfoCircle, faSprout, faGem, faCogs, faBoxes, faCircle, faCircleNodes, faCheckCircle, faFlag, faFireAlt, faChessRook, faMedal, faAward, faCertificate, faRoad, faCodeBranch, faArrowUpRightDots, faDiamond, faBell } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { Link } from 'react-router-dom';
@@ -149,30 +149,39 @@ const Navbar = () => {
 
     return (
         <>
-            <nav className="bg-indigo-600 lg:bg-[#0d1420] text-white fixed shadow-md w-full z-[99999]">
+            <nav className="bg-[#0d1420] text-white fixed shadow-md w-full z-[99999]">
                 <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-16">
                         {/* Logo Section */}
                         <div className="lg:hidden md:hidden relative flex items-center hover:scale-105 transition-all duration-200">
-                            <Link to="/updates" className="text-xl font-bold">
-                                ReLIFE
-                                {newUpdateAvailable && (<div className='bg-red-500 w-4 h-4 rounded-full text-sm flex items-center justify-center absolute bottom-0 right-[-20px]'><FontAwesomeIcon icon={faExclamation}/></div> )}
-
+                            <Link to={`/account/${user.id}`} className="text-lg font-bold">
+                                Hi, {accountData.username}
                             </Link>
                             
                         </div>
-                        <SpiritDisplay />
+                        {/* <SpiritDisplay />
                         <p className="text-sm text-cyan-300 font-semibold ml-1">
                             ({format(timeLeft.hours)}:{format(timeLeft.minutes)}:{format(timeLeft.seconds)})
-                        </p>
+                        </p> */}
 
                         {/* <div className='ml-auto text-cyan-300'>
                             <FontAwesomeIcon icon={faFireAlt} />
                             {console.log(accountData)}
                             <label className='font-semibold text-orange-500 ml-1 text-lg'>{spiritHealth}</label>
                         </div> */}
-                        <span className={`
-                            fa-layers fa-fw rounded-full font-bold uppercase tracking-wider text-3xl mx-4`}>
+                       
+                        <Link to={'/updates'} className='relative ml-auto mr-3'>
+                            <FontAwesomeIcon icon={faBell} className='text-lg'/>
+                            {newUpdateAvailable && (<div className='bg-red-500 w-3 h-3 rounded-full text-xs flex items-center justify-center absolute top-0 left-6'><FontAwesomeIcon icon={faExclamation}/></div>)}
+                        </Link>
+                        {/* <div className='relative mx-2'>
+                            <div className='flex items-center justify-center'>
+                                <FontAwesomeIcon className='text-3xl text-yellow-400' icon={faCertificate} />
+                                <div className='absolute text-indigo-600 font-bold'>{calculateRank(calculateLevel(accountData?.experience).level)}</div>
+                            </div>
+                        </div> */}
+                         <span className={`
+                            fa-layers fa-fw rounded-full font-bold uppercase tracking-wider text-3xl mx-2`}>
                                 <FontAwesomeIcon
                                     icon={faDiamond}
                                     className={`${
@@ -198,19 +207,14 @@ const Navbar = () => {
                                         : rank === "Z" ? "text-black"
                                         : "text-gray-400"
                                     }`}
-                                    />
+                                />
 
-                                <span className="fa-layers-text font-extrabold text-white" data-fa-transform="shrink-8">{calculateRank(calculateLevel(accountData?.experience).level)}</span>
-                            </span>
-                        {/* <div className='relative mx-2'>
-                            <div className='flex items-center justify-center'>
-                                <FontAwesomeIcon className='text-3xl text-yellow-400' icon={faCertificate} />
-                                <div className='absolute text-indigo-600 font-bold'>{calculateRank(calculateLevel(accountData?.experience).level)}</div>
-                            </div>
-                        </div> */}
-                        <div className='text-yellow-400 font-semibold lg:mr-0 hidden md:flex'>Lvl.{accountData ? calculateLevel(accountData?.experience).level : 0}</div>
-                        
+                            <span className="fa-layers-text font-extrabold text-white" data-fa-transform="shrink-8">{calculateRank(calculateLevel(accountData?.experience).level)}</span>
+                        </span>
                         <ExperienceDisplay />
+
+                        <div className='text-yellow-400 font-semibold ml-3 hidden md:flex'>Lvl.{accountData ? calculateLevel(accountData?.experience).level : 0}</div>
+
 
                         {/* <GoldDisplay /> */}
                         
@@ -224,9 +228,8 @@ const Navbar = () => {
 
                         {/* Desktop Navigation Links */}
                         <div className="hidden drop-shadow-xl md:flex lg:flex flex-col space-y-4 md:space-y-2 items-start bg-[#0d1420] text-white w-[220px] h-full fixed top-0 left-0 p-4">
-                            <Link to="/updates" className="relative text-xl font-bold tracking-wide mb-4 ml-3 w-full hover:scale-105 transition-all duration-200">
-                                ReLIFE
-                                {newUpdateAvailable && (<div className='bg-red-500 w-4 h-4 rounded-full text-sm flex items-center justify-center absolute bottom-0 right-[-20px]'><FontAwesomeIcon icon={faExclamation}/></div>)}
+                            <Link to={`/account/${user.id}`} className="relative text-lg font-bold tracking-wide mb-4 ml-3 w-full hover:scale-105 transition-all duration-200">
+                                Hi, {accountData.username}
                             </Link>
                             
                             <Link
@@ -402,13 +405,13 @@ const Navbar = () => {
                             >
                                 <FontAwesomeIcon icon={faQuestionCircle} /> Help
                             </Link>
-                            <Link
+                            {/* <Link
                                 to={`/account/${user?.id}`}
                                 className="w-full px-3 py-2 rounded-md rounded-md hover:bg-indigo-600 text-sm font-medium text-white animate-all duration-200 hover:scale-105"
                                 data-tip="Your Account"
                             >
                                 <FontAwesomeIcon icon={faUser} /> {user?.username} 
-                            </Link>
+                            </Link> */}
                             
                         </div>
 
@@ -480,7 +483,7 @@ const Navbar = () => {
 
                 {/* Mobile Navigation Menu */}
                 {isMobileMenuOpen && (
-                    <div className="md:hidden bg-indigo-700">
+                    <div className="md:hidden bg-[#1a2331]">
                     <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
                         
                         {/* Mobile Version of the Leaderboard Link */}

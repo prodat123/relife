@@ -8,6 +8,7 @@ import Confetti from 'react-confetti';
 import LevelUpScreen from './LevelUpScreen';
 import { UserContext } from '../Account/UserContext';
 import CurrentStepPopup from '../Paths/CurrentStepPopup';
+import { BeatLoader } from 'react-spinners';
 
 const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const currentDay = new Date().toLocaleDateString(undefined, { weekday: "long" });
@@ -17,7 +18,7 @@ const month = String(now.getMonth() + 1).padStart(2, '0');
 const day = String(now.getDate()).padStart(2, '0');
 const date = `${year}-${month}-${day}`;
 
-function ScheduledQuests({ updated, updateDashboard }) {
+function ScheduledQuests({ onScheduledDays, updated, updateDashboard }) {
     const userId = JSON.parse(localStorage.getItem("user"))?.id
     const {accountDataRef} = useContext(UserContext);
     const [accountData, setAccountData] = useState({});
@@ -50,6 +51,8 @@ function ScheduledQuests({ updated, updateDashboard }) {
         Sunday: []
     });
 
+    const [scheduledDays, setScheduledDays] = useState({}); // Days the current quest is scheduled for
+
     useEffect(() => {
         const interval = setInterval(() => {
             if (accountDataRef.current && accountDataRef.current.currency !== undefined) {
@@ -74,15 +77,14 @@ function ScheduledQuests({ updated, updateDashboard }) {
         }
     }, [scheduledQuests]);
 
+    const capitalize = (str) => str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+
     const fetchScheduledQuests = async () => {
         try {
             const response = await axios.get(`${config.backendUrl}/scheduled-quests/${userId}`);
-            const data = response.data;    
-
-            console.log(data);
-
-            
-
+            const data = response.data;
+    
+            // Initialize daysMap with empty arrays for each day
             const daysMapTemp = {
                 Monday: [],
                 Tuesday: [],
@@ -92,13 +94,16 @@ function ScheduledQuests({ updated, updateDashboard }) {
                 Saturday: [],
                 Sunday: []
             };
-
+    
+            // Handle case where no quests are found for the user
             if (!data || data.message === "No scheduled quests found for this user") {
-                setDaysMap(daysMapTemp); // optionally clear state
+                setDaysMap(daysMapTemp); // Optionally clear state
+                setScheduledDays({}); // Clear scheduled days as well
                 setLoading(false);
                 return;
             }
-
+    
+            // Process each quest and populate daysMapTemp
             data.forEach(quest => {
                 if (Array.isArray(quest.days) && quest.days.length > 0) {
                     quest.days.forEach(dayObj => {
@@ -119,25 +124,57 @@ function ScheduledQuests({ updated, updateDashboard }) {
                                 period: quest.period,
                                 period_completed: quest.period_completed,
                             };
-
+    
                             daysMapTemp[day].push(updatedQuest);
                         }
                     });
                 }
             });
-
+    
+            // Create an object to map questId to days
+            const parsedDayMap = {};
+    
+            data.forEach((quest) => {
+                let parsedDays = [];
+    
+                // Check if days is an array or string and handle accordingly
+                if (Array.isArray(quest.days)) {
+                    parsedDays = quest.days.map(d =>
+                        typeof d === 'string' ? capitalize(d) : capitalize(d.day)
+                    );
+                } else if (typeof quest.days === 'string') {
+                    try {
+                        const parsed = JSON.parse(quest.days);
+                        parsedDays = parsed.map(d =>
+                            typeof d === 'string' ? capitalize(d) : capitalize(d.day)
+                        );
+                    } catch (e) {
+                        console.error('Failed to parse quest.days string:', e);
+                    }
+                }
+    
+                // Store the parsed days in the map using quest.id as the key
+                parsedDayMap[quest.id] = parsedDays;
+            });
+    
+            // Update the state with the parsed day map
+            setScheduledDays(parsedDayMap);
+            onScheduledDays(parsedDayMap);
             // ✅ Update the daysMap after building it
             setDaysMap(daysMapTemp);
-            setLoading(false);    
+            setLoading(false);
+    
         } catch (err) {
             console.error("Error fetching scheduled quests:", err);
+            setLoading(false); // Ensure loading is set to false on error
         }
     };
-
+    
     useEffect(() => {
         fetchScheduledQuests();
         fetchActiveAndCompletedQuests();
     }, [removedQuest, updated, claimableQuests, updatedScheduledQuests]);
+    
 
     useEffect(() => {
         if (daysMap[currentDay]) {
@@ -229,7 +266,14 @@ function ScheduledQuests({ updated, updateDashboard }) {
     };
 
     if (loading) {
-        return <div>Loading...</div>;
+        return (
+            <BeatLoader
+                color="#36d7b7" // Set your desired color
+                loading={loading}
+                size={10} // Adjusts the size of the bars
+                margin={2} // Adjusts the spacing between bars;
+            />
+        )
     }
 
     if (error) {
@@ -306,7 +350,7 @@ function ScheduledQuests({ updated, updateDashboard }) {
                             {daysMap[day].map(quest => (
                                 <div
                                 key={`scheduled-quest-${quest.id}`}
-                                className={`border-l-8 border-${getQuestColor(quest.stat_reward)} bg-gray-700 rounded-lg p-4 relative group hover:shadow-xl transition`}
+                                className={`border-l-8 border-${getQuestColor(quest.stat_reward)} bg-gray-700 rounded-md p-4 relative group hover:shadow-xl transition`}
                                 >
                                 {/* Remove Button */}
                                 <button
@@ -316,9 +360,9 @@ function ScheduledQuests({ updated, updateDashboard }) {
                                     <FontAwesomeIcon icon={faXmark} />
                                 </button>
 
-                                <DaySelector questId={quest.id} updateScheduledQuests={updateScheduledQuests} />
+                                <DaySelector questId={quest.id} scheduledDays={scheduledDays} updateScheduledQuests={updateScheduledQuests} />
 
-                                <div className="flex items-center justify-between">
+                                <div className="flex items-center justify-between flex-wrap">
                                     <div className="text-white text-lg font-bold flex gap-3">
                                     {quest.name}
                                     {Object.entries(statIcons).map(([key, { icon, color }]) => {
@@ -326,7 +370,7 @@ function ScheduledQuests({ updated, updateDashboard }) {
                                         if (!value) return null;
 
                                         return (
-                                            <div key={key} className={`flex text-md items-center text-${color}`}>
+                                            <div key={key} className={`text-lg text-${color}`}>
                                                 <FontAwesomeIcon icon={icon} />
                                             </div>
                                         );

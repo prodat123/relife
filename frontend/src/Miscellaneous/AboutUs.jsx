@@ -1,5 +1,5 @@
 import React from 'react'
-import { FaDiscord, FaInstagram, FaItchIo, FaTwitter, FaYoutube } from 'react-icons/fa'
+import { FaDiscord, FaInstagram, FaItchIo, FaLinkedin, FaLinkedinIn, FaTwitter, FaYoutube } from 'react-icons/fa'
 
 function AboutUs() {
     const joinDiscord = async () => {
@@ -47,6 +47,22 @@ function AboutUs() {
                         <a href='https://eapple.itch.io' target='_blank'><FaDiscord /></a>
                         <a href='https://www.youtube.com/@EappleGames' target='_blank'><FaYoutube /></a>
                     </div> */}
+                </div>
+                <div className='bg-gray-800 p-4 mt-2 rounded-md text-white text-center'>
+                    <h3 className='font-semibold text-3xl'>Keerthana</h3>
+                    <div className='mt-2'>Co-Artist</div>
+                    {/* <div className='flex items-center justify-center gap-3 mt-4 text-xl'>
+                        <a href='https://eapple.itch.io' target='_blank'><FaDiscord /></a>
+                        <a href='https://www.youtube.com/@EappleGames' target='_blank'><FaYoutube /></a>
+                    </div> */}
+                </div>
+                <div className='bg-gray-800 p-4 mt-2 rounded-md text-white text-center'>
+                    <h3 className='font-semibold text-3xl'>KayJay</h3>
+                    <div className='mt-2'>Backend Developer</div>
+                    <div className='flex items-center justify-center gap-3 mt-4 text-xl'>
+                        <a href='https://www.linkedin.com/in/kyle-lee-845697188/' target='_blank'><FaLinkedin /></a>
+                        <a href='https://www.youtube.com/@kjl3080' target='_blank'><FaYoutube /></a>
+                    </div>
                 </div>
             </div>
         </div>

@@ -5,12 +5,13 @@ import config from '../config';
 import axios from 'axios';
 import { UserContext } from '../Account/UserContext';
 
-function DaySelector({ questId, updateScheduledQuests }) {
+function DaySelector({ questId, scheduledDays, updateScheduledQuests }) {
     const userId = JSON.parse(localStorage.getItem('user'))?.id;
     const { fetchAccountData } = useContext(UserContext); 
     const [showDays, setShowDays] = useState(false);
     const [selectedDays, setSelectedDays] = useState([]);
-    const [scheduledDays, setScheduledDays] = useState([]);
+    const [savedScheduledDays, setSavedScheduledDays] = useState(scheduledDays || {});
+    // const [scheduledDays, setScheduledDays] = useState([]);
     const [isScheduled, setIsScheduled] = useState(false);
     const [loading, setLoading] = useState(true);
     const dropdownRef = useRef(null);
@@ -23,54 +24,62 @@ function DaySelector({ questId, updateScheduledQuests }) {
     };
 
     useEffect(() => {
-        const fetchScheduledQuests = async () => {
-            try {
-                const response = await axios.get(`${config.backendUrl}/scheduled-quests/${userId}`);
+        if (savedScheduledDays[questId]) {
+            setIsScheduled(true);
+            setSelectedDays(savedScheduledDays[questId]);
+        }
+    }, [savedScheduledDays, questId]); // This effect will run when either scheduledDays or questId changes
+    
 
-                if (!response || response.message === "No scheduled quests found for this user") {
-                    setLoading(false);
-                    return;
-                }
-
-                const quest = response.data.find(q => q.id === questId);
-                if (quest) {
-                    setIsScheduled(true);
-                    let parsedDays = [];
-                    if (Array.isArray(quest.days)) {
-                        parsedDays = quest.days.map(d => 
-                            typeof d === 'string' ? d.charAt(0).toUpperCase() + d.slice(1).toLowerCase() 
-                            : d.day.charAt(0).toUpperCase() + d.day.slice(1).toLowerCase()
-                        );
-                    } else if (typeof quest.days === 'string') {
-                        try {
-                            const parsed = JSON.parse(quest.days);
-                            parsedDays = parsed.map(d =>
-                                typeof d === 'string' ? d.charAt(0).toUpperCase() + d.slice(1).toLowerCase()
-                                : d.day.charAt(0).toUpperCase() + d.day.slice(1).toLowerCase()
-                            );
-                        } catch (e) {
-                            console.error('Failed to parse quest.days string:', e);
-                        }
-                    }
-                    setScheduledDays(parsedDays);
-                    setSelectedDays(parsedDays);
-
-                } else {
-                    setIsScheduled(false);
-                    setScheduledDays([]);
-                    setSelectedDays([]);
-                }
-            } catch (err) {
-                setIsScheduled(false);
-                setScheduledDays([]);
-                setSelectedDays([]);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchScheduledQuests();
-    }, [questId]);
+    // useEffect(() => {
+    //     console.log(scheduledDays[questId]);
+    //     // const fetchScheduledQuests = async () => {
+    //     //     try {
+    //     //         const response = await axios.get(`${config.backendUrl}/scheduled-quests/${userId}`);
+    
+    //     //         if (!response || response.message === "No scheduled quests found for this user") {
+    //     //             setLoading(false);
+    //     //             return;
+    //     //         }
+    
+    //     //         const quest = response.data.find(q => q.id === questId);
+    //     //         if (quest) {
+    //     //             setIsScheduled(true);
+    //     //             let parsedDays = [];
+    
+    //     //             if (Array.isArray(quest.days)) {
+    //     //                 parsedDays = quest.days.map(d =>
+    //     //                     typeof d === 'string' ? capitalize(d) : capitalize(d.day)
+    //     //                 );
+    //     //             } else if (typeof quest.days === 'string') {
+    //     //                 try {
+    //     //                     const parsed = JSON.parse(quest.days);
+    //     //                     parsedDays = parsed.map(d =>
+    //     //                         typeof d === 'string' ? capitalize(d) : capitalize(d.day)
+    //     //                     );
+    //     //                 } catch (e) {
+    //     //                     console.error('Failed to parse quest.days string:', e);
+    //     //                 }
+    //     //             }
+    
+    //     //             setScheduledDays(parsedDays);
+    //     //             setSelectedDays(parsedDays);
+    //     //         } else {
+    //     //             setIsScheduled(false);
+    //     //             setScheduledDays([]);
+    //     //             setSelectedDays([]);
+    //     //         }
+    //     //     } catch (err) {
+    //     //         setIsScheduled(false);
+    //     //         setScheduledDays([]);
+    //     //         setSelectedDays([]);
+    //     //     } finally {
+    //     //         setLoading(false);
+    //     //     }
+    //     // };
+    
+    //     // fetchScheduledQuests();
+    // }, []);
 
     const buttonRef = useRef(null);
 
@@ -146,7 +155,7 @@ function DaySelector({ questId, updateScheduledQuests }) {
                 </>
             ) : isScheduled ? (
                 <>
-                {scheduledDays.join(', ')} <FontAwesomeIcon icon={faAngleDown} />
+                {savedScheduledDays[questId]?.join(', ')} <FontAwesomeIcon icon={faAngleDown} />
                 </>
             ) : (
                 <>
