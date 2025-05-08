@@ -1501,36 +1501,6 @@ fastify.post('/scheduled-quests/remove', async (request, reply) => {
 });
 
 
-  
-  
-  
-
-// fastify.get('/quests/daily', async (request, reply) => {
-//     try {
-//         // Set timezone to Pacific Time (PST/PDT)
-//         await db.query("SET time_zone = '-08:00';"); // Pacific Standard Time (PST, UTC-8)
-
-//         // Fetch today's quests
-//         const query = `
-//             SELECT q.id, q.name, q.description, q.difficulty, q.experience_reward, q.item_reward, q.stat_reward
-//             FROM quests q
-//             INNER JOIN daily_quests dq ON q.id = dq.quest_id;
-//         `;
-
-//         const [results] = await db.query(query);
-
-//         if (!results || results.length === 0) {
-//             console.log('No quests found for today.');
-//             return reply.code(404).send({ message: 'No daily quests found' });
-//         }
-
-//         reply.send(results);
-//     } catch (err) {
-//         console.error('Error fetching daily quests:', err.message);
-//         reply.code(500).send({ message: 'Internal Server Error', error: err.message });
-//     }
-// });
-
 fastify.get('/account', async (request, reply) => {
     const { userId } = request.query;
   
@@ -1738,28 +1708,6 @@ fastify.post('/update-equipment', async (request, reply) => {
             return reply.code(404).send({ error: 'User not found' });
         }
 
-        // let userStats = JSON.parse(userResult[0].stats || '{}');
-        // const equippedItemId = userResult[0].equippedItem;
-
-        // // ⚙️ Handle Stat Adjustment for Previously Equipped Item
-        // if (equippedItemId) {
-        //     console.log("Removing stats from previously equipped item");
-
-        //     const equippedItem = inventory.find(item => item.id === equippedItemId);
-        //     if (equippedItem) {
-        //         const equippedItemStats = JSON.parse(equippedItem.stats || '{}');
-        //         Object.entries(equippedItemStats).forEach(([stat, value]) => {
-        //             const normalizedStat = stat.toLowerCase().trim();
-        //             if (userStats[normalizedStat] !== undefined) {
-        //                 userStats[normalizedStat] -= value;
-        //                 if (userStats[normalizedStat] <= 0) delete userStats[normalizedStat];
-        //             }
-        //         });
-        //     } else {
-        //         console.warn("Previously equipped item not found in inventory");
-        //     }
-        // }
-
         // ⚙️ Handle Unequip Logic
         if (itemId === null) {
             console.log("Unequipping item");
@@ -1783,17 +1731,6 @@ fastify.post('/update-equipment', async (request, reply) => {
         if (!newItem) {
             return reply.code(404).send({ error: 'Item not found in inventory' });
         }
-
-        // const newItemStats = JSON.parse(newItem.stats || '{}');
-        // Object.entries(newItemStats).forEach(([stat, value]) => {
-        //     const normalizedStat = stat.toLowerCase().trim();
-        //     // Add or update stat, without duplicating
-        //     if (userStats[normalizedStat]) {
-        //         userStats[normalizedStat] += value;
-        //     } else {
-        //         userStats[normalizedStat] = value;
-        //     }
-        // });
 
         // Update stats and equip the new item
         await db.query(
@@ -2350,62 +2287,7 @@ fastify.post('/spell-shop/buy', async (request, reply) => {
         reply.code(500).send({ error: 'Failed to purchase spell.' });
     }
 });
-//     const { userId, intelligence } = request.body;
 
-//     if (!userId || intelligence === undefined) {
-//         return reply.code(400).send({ error: 'Invalid request parameters.' });
-//     }
-
-//     try {
-//         // Fetch user details including last_spin timestamp
-//         const [user] = await db.query(
-//             `SELECT last_spin FROM users WHERE id = ?`,
-//             [userId]
-//         );
-
-//         if (user.length === 0) {
-//             return reply.code(404).send({ error: 'User not found.' });
-//         }
-
-//         const { last_spin } = user[0];
-//         const now = new Date();
-
-//         // Check cooldown period (6 hours)
-//         if (last_spin) {
-//             const lastSpinDate = new Date(last_spin);
-//             const hoursSinceLastSpin = (now - lastSpinDate) / (1000 * 60 * 60);
-
-//             if (hoursSinceLastSpin < 6) {
-//                 const timeLeft = 6 - hoursSinceLastSpin;
-//                 return reply.code(400).send({
-//                     error: `You can spin the wheel again in ${Math.ceil(timeLeft)} hours.`,
-//                 });
-//             }
-//         }
-
-//         // Calculate the discount
-//         const baseDiscount = Math.floor(Math.random() * 21); // Random discount 0-20%
-//         const intelligenceBonus = Math.floor(intelligence / 10); // Intelligence influence
-//         const finalDiscount = Math.min(baseDiscount + intelligenceBonus, 90); // Cap at 90%
-
-//         // Update user's discount and last_spin timestamp
-//         await db.query(
-//             `UPDATE users
-//              SET discount = ?, last_spin = ?
-//              WHERE id = ?`,
-//             [finalDiscount, now, userId]
-//         );
-
-//         reply.send({
-//             success: true,
-//             message: `You received a ${finalDiscount}% discount!`,
-//             discount: finalDiscount,
-//         });
-//     } catch (err) {
-//         console.error('Error spinning the wheel:', err.message, err.stack);
-//         reply.code(500).send({ error: 'Failed to spin the wheel.' });
-//     }
-// });
 
 fastify.post('/tower-join', async (request, reply) => {
     let { id, userId } = request.body;
@@ -2961,15 +2843,6 @@ fastify.post('/vows/finish', async (request, reply) => {
     try {
 
         const completionDate = completedDate ? completedDate : new Date().toISOString().split('T')[0];
-
-        // Check if the quest is already completed today
-        // const [existing] = await db.query(
-        //     `SELECT * FROM vows WHERE id = ? AND created_by = ? AND completed = 1 AND DATE(completed_at) = ?`,
-        //     [questId, userId, completionDate]
-        // );
-        // if (existing.length > 0) {
-        //     return reply.code(400).send({ error: 'Quest already completed today.' });
-        // }
 
         // Retrieve the quest's rewards (experience, item, and stat rewards)
         const [quest] = await db.query(
@@ -5151,8 +5024,3 @@ const start = async () => {
 };
   
 start();
-
-
-// fastify.listen(3001, () => {
-//     console.log('✅ Backend running on HTTP at port 3001');
-// });
