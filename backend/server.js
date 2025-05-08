@@ -3699,6 +3699,26 @@ fastify.get("/craftable-items", async (request, reply) => {
     }
 });
 
+fastify.get("/craftable-scrapboxes", async (request, reply) => {
+    try {
+        const [result] = await db.query("SELECT * FROM scrapboxes");
+
+        // Parse the loot_table field instead of recipe
+        const formattedBoxes = result.map(item => ({
+            ...item,
+            loot_table: JSON.parse(item.loot_table) // Parse loot table JSON
+        }));
+
+        reply.send(formattedBoxes);
+    } catch (error) {
+        console.error(error);
+        reply.code(500).send({ error: "Failed to fetch craftable scrapboxes" });
+    }
+});
+
+
+
+
 fastify.post('/craft', async (request, reply) => {
     const { userId, itemId, quantity } = request.body;
 
@@ -3809,13 +3829,13 @@ fastify.post('/craft-scrapbox', async (request, reply) => {
             existingBox.quantity += quantity;
         } else {
             inventory.push({
+                id: uuidv4(),
                 name: scrapbox.name,
                 type: 'scrapbox',
                 quantity,
-                stats: {
-                    loot_table: JSON.parse(scrapbox.loot_table),
-                    rarity: scrapbox.rarity
-                }
+                loot_table: JSON.parse(scrapbox.loot_table),
+                rarity: scrapbox.rarity
+               
             });
         }
 
@@ -3830,7 +3850,98 @@ fastify.post('/craft-scrapbox', async (request, reply) => {
     }
 });
 
+fastify.post('/open-scrapbox', async (request, reply) => {
+    const { userId, scrapboxId } = request.body;
+  
+    try {
+        // 1. Get user inventory
+        const [users] = await db.query(`SELECT inventory FROM users WHERE id = ?`, [userId]);
+        if (users.length === 0) return reply.code(404).send({ error: 'User not found' });
+    
+        let inventory = JSON.parse(users[0].inventory);
+    
+        // 2. Find scrapbox by ID in inventory
+        const scrapboxItem = inventory.find(item => item.id === scrapboxId);
+        if (!scrapboxItem) return reply.code(400).send({ error: 'Scrapbox not found in inventory' });
+    
+        console.log(scrapboxItem.name);
+        // 3. Get scrapbox item data (loot table)
+        const [items] = await db.query(`SELECT * FROM scrapboxes WHERE name = ?`, [scrapboxItem.name]);
+        console.log(items);
+        if (items.length === 0) return reply.code(400).send({ error: 'Scrapbox not found in scrapbox table' });
+    
+        const scrapboxData = items[0];
+        const lootTable = JSON.parse(scrapboxData.loot_table); // { "artisan": 50, "knight": 1 }
+    
+        // 4. Roll for random item based on weight
+        const getRandomItemFromLootTable = (table) => {
+            const entries = Object.entries(table);
+            const totalWeight = entries.reduce((sum, [, weight]) => sum + weight, 0);
+            const rand = Math.random() * totalWeight;
+    
+            let runningWeight = 0;
+            for (const [itemName, weight] of entries) {
+            runningWeight += weight;
+            if (rand <= runningWeight) return itemName;
+            }
+            return null;
+        };
+    
+        const rewardedItemRarity = getRandomItemFromLootTable(lootTable);
+        if (!rewardedItemRarity) return reply.code(500).send({ error: 'Loot roll failed' });
+        
+        console.log(rewardedItemRarity); 
 
+        // 5. Get full data of rewarded item
+        const [[rewardItem]] = await db.query(
+            `SELECT * FROM items WHERE rarity = ? ORDER BY RAND() LIMIT 1`,
+            [rewardedItemRarity]
+        );
+          
+        if (rewardItem.length === 0) return reply.code(400).send({ error: 'Reward item not found in items table' });
+    
+        const rewardData = rewardItem;
+    
+        // 6. Add rewarded item to inventory
+        const existingReward = inventory.find(item => item.name === rewardData.name && item.type === rewardData.type);
+    
+        if (existingReward) {
+            existingReward.quantity = (existingReward.quantity || 1) + 1;
+        } else {
+            const newReward = {
+                id: uuidv4(),
+                name: rewardData.name,
+                type: rewardData.type,
+                description: rewardData.description,
+                image_url: rewardData.image_url,
+                levelRequired: rewardData.levelRequired || 1,
+                quantity: 1,
+                rarity: rewardData.rarity,
+            };
+            inventory.push(newReward);
+        }
+    
+        // 7. Remove one scrapbox
+        scrapboxItem.quantity -= 1;
+        if (scrapboxItem.quantity <= 0) {
+            inventory = inventory.filter(item => item.id !== scrapboxId);
+        }
+    
+        // 8. Save updated inventory
+        await db.query(`UPDATE users SET inventory = ? WHERE id = ?`, [JSON.stringify(inventory), userId]);
+    
+        return reply.send({
+            success: true,
+            rewardedItem: rewardData.name,
+            rewardData,
+            remainingScrapboxes: scrapboxItem.quantity > 0 ? scrapboxItem.quantity : 0
+        });
+    } catch (error) {
+      console.error('Error opening scrapbox:', error);
+      return reply.code(500).send({ error: 'Internal server error' });
+    }
+});
+  
 
 fastify.post('/scrap', async (request, reply) => {
     const { userId, itemId } = request.body;
