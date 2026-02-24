@@ -38,6 +38,7 @@ npm install
 
 ### 4. Create an ENV setup in the backend folder
 
+```bash
 DB_IP=127.0.0.1
 DB_PORT=3306
 DB_USERNAME=root
@@ -45,3 +46,4 @@ DB_PASSWORD=
 DB_DATABASE=relife_db
 RECAPTCHA_SECRET_KEY=your_secret_key
 SESSION_SECRET=a_very_long_random_string
+```
