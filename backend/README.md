@@ -44,6 +44,4 @@ DB_PORT=3306
 DB_USERNAME=root
 DB_PASSWORD=
 DB_DATABASE=relife_db
-RECAPTCHA_SECRET_KEY=your_secret_key
-SESSION_SECRET=a_very_long_random_string
 ```
