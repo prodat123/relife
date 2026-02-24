@@ -1,0 +1,177 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #888 transparent;
+}
+
+body {
+  font-family: "Space Mono";
+  font-weight: 400;
+  font-style: normal;
+}
+
+img.pixel-art {
+  image-rendering: pixelated; /* Ensures pixel art doesn't get smoothed */
+}
+
+/* For modern browsers */
+.hide-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, and Edge */
+}
+
+/* Global custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+@keyframes flyUp {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-5px) scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-40px) scale(0.6);
+  }
+}
+
+.animate-flyUp {
+  animation: flyUp 1.2s ease-in-out;
+}
+
+.pixelated-flame {
+  /* This forces the browser to render the SVG with hard edges, no blurring */
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+@layer utilities {
+  .text-shine {
+    position: relative;
+    display: inline-block;
+    overflow: hidden;
+  }
+
+  .text-shine::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 200%;
+    height: 100%;
+    background: linear-gradient(
+      120deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.5) 50%,
+      transparent 100%
+    );
+    animation: shine-move 2s linear infinite;
+  }
+
+  @keyframes shine-move {
+    0% {
+      left: -100%;
+    }
+    100% {
+      left: 100%;
+    }
+  }
+}
+
+@keyframes pulseGlow {
+  0% {
+    box-shadow: inset 0 0 10px rgba(59, 130, 246, 0.1),
+      inset 0 0 20px rgba(59, 130, 246, 0.2), 0 0 10px rgba(0, 0, 0, 0.5);
+  }
+  50% {
+    box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.2),
+      inset 0 0 30px rgba(59, 130, 246, 0.4), 0 0 15px rgba(0, 0, 0, 0.6);
+  }
+  100% {
+    box-shadow: inset 0 0 10px rgba(59, 130, 246, 0.1),
+      inset 0 0 20px rgba(59, 130, 246, 0.2), 0 0 10px rgba(0, 0, 0, 0.5);
+  }
+}
+
+@keyframes spin-slow {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 3s linear infinite;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(5deg);
+  }
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+:root {
+  --color-bg: #040a20;
+  --color-text: #f4f7fa;
+  --color-primary: #3b82f6;
+  --color-secondary: #a11b29;
+  --color-gray: #1f2937;
+}
+.theme-blue {
+  --color-primary: #3b82f6;
+}
+.theme-red {
+  --color-primary: #ef4444;
+}
+.theme-green {
+  --color-primary: #22c55e;
+}
+
+.scroll-snap-container {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.snap-center {
+  scroll-snap-align: center;
+}
