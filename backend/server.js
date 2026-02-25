@@ -25,7 +25,6 @@ dotenv.config();
 // Initialize Fastify
 const fastify = Fastify({ trustProxy: true });
 
-// Initialize Stripe
 fastify.register(underPressure);
 
 fastify.register(authRoutes, { prefix: "/auth" });
@@ -109,7 +108,7 @@ fastify.addHook("preHandler", async (request, reply) => {
 
   const ipData = questsRateLimit[ip];
 
-  // ✅ Check if IP is currently blocked
+  // Check if IP is currently blocked
   if (ipData.blockedUntil && now < ipData.blockedUntil) {
     console.warn(`IP ${ip} is temporarily blocked.`);
     return reply
@@ -117,7 +116,7 @@ fastify.addHook("preHandler", async (request, reply) => {
       .send({ error: "Too many requests. Try again later." });
   }
 
-  // ✅ Reset count if time window has passed
+  // Reset count if time window has passed
   if (now - ipData.startTime > IP_BLOCK_WINDOW) {
     ipData.count = 1;
     ipData.startTime = now;
@@ -126,7 +125,7 @@ fastify.addHook("preHandler", async (request, reply) => {
     ipData.count++;
   }
 
-  // ✅ Block IP if request count exceeds the limit
+  // Block IP if request count exceeds the limit
   if (ipData.count > IP_BLOCK_LIMIT) {
     ipData.blockedUntil = now + IP_BLOCK_DURATION;
     console.warn(
@@ -298,52 +297,6 @@ async function autoSelectQuest(questId, userId) {
     ],
   );
 }
-
-cron.schedule(
-  "0 0 * * *",
-  async () => {
-    await clearCompletedQuestParticipants();
-
-    const daysOfWeek = [
-      "Sunday",
-      "Monday",
-      "Tuesday",
-      "Wednesday",
-      "Thursday",
-      "Friday",
-      "Saturday",
-    ];
-    const currentDay = daysOfWeek[new Date().getUTCDay()]; // returns e.g., "Monday"
-
-    try {
-      // ✅ Reset numberOfRuns in tower_players
-      await db.query("UPDATE tower_players SET numberOfRuns = 0");
-      console.log("🔁 Reset numberOfRuns to 0 for all tower players");
-
-      const [scheduled] = await db.query("SELECT * FROM scheduled_quests");
-
-      for (const row of scheduled) {
-        const daysArray = JSON.parse(row.days || "[]");
-
-        if (daysArray.includes(currentDay)) {
-          await autoSelectQuest(row.quest_id, row.user_id);
-          console.log(
-            `✅ Auto-started quest ${row.quest_id} for user ${row.user_id} on ${currentDay}`,
-          );
-        }
-      }
-    } catch (err) {
-      console.error("❌ Error running daily cron:", err);
-    }
-
-    // await insertDailyQuests();
-    // await checkAndUpdateVows();
-  },
-  {
-    scheduled: true,
-    timezone: "UTC",
-  },
-);
 
 fastify.post("/schedule-quest", async (request, reply) => {
   // 1. Destructure the new 'schedule' object from the request body
@@ -531,12 +484,10 @@ fastify.post("/missions/claim", async (request, reply) => {
 fastify.post("/missions/update", async (request, reply) => {
   const { userId, missions, date, reward, difficulty } = request.body;
 
-  // 🔐 Authentication
   if (!request.session.userId || request.session.userId !== userId) {
     return reply.code(401).send({ error: "Unauthorized: Invalid Session" });
   }
 
-  // 🧩 Validation
   if (
     !userId ||
     !missions ||
@@ -551,7 +502,6 @@ fastify.post("/missions/update", async (request, reply) => {
   }
 
   try {
-    // 1️⃣ Fetch current JSON data
     const [userRows] = await db.query(
       `SELECT dailyMissions FROM users WHERE id = ?`,
       [userId],
@@ -563,7 +513,6 @@ fastify.post("/missions/update", async (request, reply) => {
 
     const user = userRows[0];
 
-    // 2️⃣ Parse existing daily missions JSON
     let existingMissions = {};
     try {
       existingMissions = user.dailyMissions
@@ -573,7 +522,6 @@ fastify.post("/missions/update", async (request, reply) => {
       existingMissions = {};
     }
 
-    // 3️⃣ Create or overwrite today's data
     existingMissions[date] = {
       missions, // Array of today's missions
       reward, // The daily reward object
@@ -582,16 +530,13 @@ fastify.post("/missions/update", async (request, reply) => {
       claimedAt: null, // When the user claimed it (null until they do)
     };
 
-    // 4️⃣ Convert back to string for storage
     const updatedJSON = JSON.stringify(existingMissions);
 
-    // 5️⃣ Save to DB
     await db.query(`UPDATE users SET dailyMissions = ? WHERE id = ?`, [
       updatedJSON,
       userId,
     ]);
 
-    // ✅ Respond
     return reply.send({
       success: true,
       message: "Daily missions and reward updated successfully.",
@@ -810,10 +755,6 @@ fastify.post("/rewards/daily-claim", async (request, reply) => {
 
 fastify.get("/account", async (request, reply) => {
   const { userId } = request.query;
-
-  // if (!request.session.userId.toString() || request.session.userId.toString()  !== userId) {
-  //     return reply.code(401).send({ error: 'Unauthorized: Invalid Session' });
-  // }
 
   if (!userId) {
     return reply.code(400).send({ error: "User ID is required" });
@@ -1202,8 +1143,7 @@ fastify.get("/leaderboard", async (request, reply) => {
 });
 fastify.post("/update-equipment", async (request, reply) => {
   const { userId, slot, itemId, inventory } = request.body;
-  // console.log(userId, slot, itemId, inventory);
-
+  
   // Validate required fields
   if (!userId || !slot || !inventory) {
     return reply
@@ -1241,7 +1181,7 @@ fastify.post("/update-equipment", async (request, reply) => {
       });
     }
 
-    // ⚙️ Handle Equip Logic
+    // Handle Equip Logic
     console.log("Equipping new item");
 
     const newItem = inventory.find((item) => item.id === itemId);
@@ -1514,121 +1454,6 @@ function getRandomRarity() {
   }
 }
 
-// Handle socket connections
-io.on("connection", (socket) => {
-  console.log("Client connected:", socket.id);
-
-  socket.on(
-    "attackBoss",
-    async ({
-      userId,
-      questId,
-      statKey,
-      statValue,
-      gateId,
-      bossName,
-      damage,
-    }) => {
-      console.log(statKey + ":" + statValue);
-      try {
-        // Fetch current gate state (boss health + participants)
-        const [rows] = await db.query(
-          `SELECT currentBossHealth, participants FROM gates WHERE id = ?`,
-          [gateId],
-        );
-
-        if (rows.length === 0) {
-          return socket.emit("error", { error: "Gate not found" });
-        }
-
-        let currentHp = rows[0].currentBossHealth;
-        let newHp = Math.max(currentHp - damage, 0);
-
-        // Parse participants JSON
-        let participants = [];
-        if (rows[0].participants) {
-          participants = JSON.parse(rows[0].participants);
-        }
-
-        // Find this user in participants list
-        const timestamp = new Date().toISOString();
-        let player = participants.find((p) => p.id === userId);
-
-        if (player) {
-          // Append to damage log
-          if (!player.damageLog) player.damageLog = [];
-          player.damageLog.push({ damage, timestamp, questId });
-        } else {
-          // Add new participant if not found
-          player = {
-            id: userId,
-            damageLog: [{ damage, timestamp, questId }],
-          };
-          participants.push(player);
-        }
-
-        // Save updated boss HP + participants log back into DB
-        await db.query(
-          `UPDATE gates SET currentBossHealth = ?, participants = ? WHERE id = ?`,
-          [newHp, JSON.stringify(participants), gateId],
-        );
-
-        // --- Step 4: Increment user's stat inside JSON column ---
-        const [userRows] = await db.query(
-          `SELECT stats FROM users WHERE id = ?`,
-          [userId],
-        );
-
-        if (userRows.length > 0) {
-          let userStats = JSON.parse(userRows[0].stats || "{}");
-
-          // Increment just like in your statReward logic
-          userStats[statKey] = (userStats[statKey] || 0) + statValue;
-
-          // --- Step 5: Save back ---
-          await db.query(`UPDATE users SET stats = ? WHERE id = ?`, [
-            JSON.stringify(userStats),
-            userId,
-          ]);
-        }
-
-        // If boss defeated
-        if (newHp <= 0) {
-          const lootDrop = await claimRewards(io, socket, {
-            userId,
-            gateId,
-            bossName,
-          });
-          if (lootDrop) {
-            io.emit("bossDefeated", { userId, gateId, bossName, lootDrop });
-          }
-        } else {
-          io.emit("bossHealthUpdate", {
-            userId,
-            gateId,
-            bossName,
-            newHp,
-            damage,
-            timestamp,
-          });
-        }
-      } catch (err) {
-        console.error("attackBoss error:", err);
-        socket.emit("error", { error: "Server error during attack" });
-      }
-    },
-  );
-
-  socket.on("fetchRewards", async ({ userId, gateId, bossName }) => {
-    try {
-      await claimRewards(io, socket, { userId, gateId, bossName });
-    } catch (err) {
-      console.error("fetchRewards error:", err);
-      socket.emit("error", { error: "Server error fetching rewards" });
-    }
-  });
-});
-
 async function claimRewards(io, socket, { userId, gateId, bossName }) {
   // 1. Get participants list
   const [rows] = await db.query(`SELECT participants FROM gates WHERE id = ?`, [
@@ -1684,52 +1509,6 @@ async function claimRewards(io, socket, { userId, gateId, bossName }) {
   });
 
   return lootDrop;
-}
-
-// Loot + floor progression helper
-async function handleBossDefeat(gateId, userId, bossName) {
-  console.log(gateId);
-  const [monsterResult] = await db.query(
-    `SELECT loot FROM monsters WHERE name = ?`,
-    [bossName],
-  );
-
-  if (!monsterResult || monsterResult.length === 0) {
-    throw new Error("Monster not found");
-  }
-
-  let lootItemIds = JSON.parse(monsterResult[0]?.loot || "[]");
-  const droppedItems = [];
-
-  // Generate 3 random loot drops
-  for (let i = 0; i < 3; i++) {
-    const desiredRarity = getRandomRarity();
-    const [lootItems] = await db.query(
-      `SELECT * FROM items WHERE id IN (?) AND rarity = ?`,
-      [lootItemIds, desiredRarity],
-    );
-
-    let itemToGive =
-      lootItems.length > 0
-        ? lootItems[Math.floor(Math.random() * lootItems.length)]
-        : null;
-
-    if (itemToGive) {
-      droppedItems.push({
-        ...itemToGive,
-        id: uuidv4(),
-        stats: JSON.parse(itemToGive.stats || "{}"),
-      });
-    }
-  }
-
-  // ✅ Update gate status to "closed"
-  if (gateId) {
-    await db.query(`UPDATE gates SET status = 'closed' WHERE id = ?`, [gateId]);
-  }
-
-  // TODO: Add logic to update user's inventory with droppedItems
-  return droppedItems;
 }
 
 const lootTablesByDuration = {
